@@ -54,7 +54,7 @@ export default function Home() {
       setFooterIdx((i) => (i + 1) % FOOTER_MESSAGES.length);
     }, 8000);
     return () => clearInterval(interval);
-  }, []);
+  }, []); // Footer rotation - forces new build
 
   // Welcome message based on entry count
   const welcomeMessage = useMemo(() => {
