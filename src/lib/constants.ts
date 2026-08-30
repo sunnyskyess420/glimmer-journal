@@ -38,7 +38,7 @@ export const TAG_GROUPS: Record<string, string[]> = {
 export const WEEKLY_PROMPTS = [
   "This week I noticed my body felt safest when…",
   "I felt most disconnected or activated on…",
-  "One thing I want to cue more safety with next week…",
+  "One thing I want to do more of next week to feel safe…",
 ];
 
 export const SECTION_HELPERS: Record<number, string> = {
