@@ -61,7 +61,7 @@ export default function DailyEntry() {
     return count;
   }, [selectedPrompt, preState, intensity, bodyLocation, tags, sleepQuality, stressLevel]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setPreState('');
     setPostState('');
     setIntensity(0);
@@ -73,7 +73,7 @@ export default function DailyEntry() {
     setResponse('');
     setSelectedPrompt(null);
     setEditingEntry(null);
-  };
+  }, []);
 
   const handleSelectPrompt = useCallback((idx: number) => {
     // Check if there's already an entry for this prompt on this date
@@ -93,7 +93,7 @@ export default function DailyEntry() {
       resetForm();
     }
     setSelectedPrompt(idx);
-  };
+  }, [dateEntries, resetForm]);
 
   const toggleTag = (tag: string) => {
     setTags((prev) => (prev.includes(tag) ? prev.filter((t2) => t2 !== tag) : [...prev, tag]));
