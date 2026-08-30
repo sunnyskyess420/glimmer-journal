@@ -283,7 +283,7 @@ export default function Home() {
           <div className="flex-1 px-4 py-4 lg:px-6">
             {activeTab === 'daily' && <DailyEntry />}
             {activeTab === 'bank' && <GlimmerBank />}
-            {activeTab === 'weekly' && <WeeklyReflection />}
+            {activeTab === 'weekly' && <div className="flex items-center justify-center py-16"><p style={{ color: t.muted }}>Weekly reflection temporarily disabled for debugging</p></div>}
             {activeTab === 'stats' && <StatsView />}
           </div>
 
