@@ -67,7 +67,7 @@ export default function WeeklyReflection() {
         setLoading(false);
       }
     })();
-  }, [weekStart]);
+  }, [weekStart]); // Only depend on weekStart to prevent infinite loop
 
   const goWeek = (dir: number) => {
     setCurrentDate((d) => {
