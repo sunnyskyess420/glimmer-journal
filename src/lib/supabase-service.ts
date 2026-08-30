@@ -145,6 +145,35 @@ export async function fetchReflection(weekStart: string) {
   return data ? { responses: JSON.parse(data.responses as string) as string[] } : null;
 }
 
+export interface WeeklyReflectionRecord {
+  weekStart: string;
+  responses: string[];
+}
+
+export async function fetchAllReflections(): Promise<WeeklyReflectionRecord[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from('weekly_reflections')
+    .select('week_start, responses')
+    .eq('user_id', user.id)
+    .order('week_start', { ascending: true });
+
+  if (error) throw error;
+
+  return (data || []).map((row: { week_start: string; responses: string }) => ({
+    weekStart: row.week_start,
+    responses: (() => {
+      try {
+        return JSON.parse(row.responses) as string[];
+      } catch {
+        return [];
+      }
+    })(),
+  }));
+}
+
 export async function saveReflection(weekStart: string, responses: string[]) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');

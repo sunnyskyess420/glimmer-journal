@@ -73,7 +73,9 @@
     "vaul": "^1.1.2",
     "z-ai-web-dev-sdk": "^0.0.18",
     "zod": "^4.0.2",
-    "zustand": "^5.0.6"
+    "zustand": "^5.0.6",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

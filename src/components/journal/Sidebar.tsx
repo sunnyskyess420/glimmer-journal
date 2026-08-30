@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   THEMES,
   THEME_ORDER,
@@ -10,6 +10,7 @@ import {
 } from '@/lib/constants';
 import { useJournalStore } from '@/store/journal-store';
 import { updateUserTheme } from '@/lib/supabase-service';
+import ExportDialog from './ExportDialog';
 
 interface SidebarProps {
   onLogout: () => void;
@@ -30,6 +31,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
 
   const t: ThemeColors = THEMES[theme];
   const streak = stats?.streak ?? 0;
+  const [exportOpen, setExportOpen] = useState(false);
 
   const uniqueDates = useMemo(() => 
     entries
@@ -157,8 +159,22 @@ export default function Sidebar({ onLogout }: SidebarProps) {
         )}
       </div>
 
-      {/* Logout */}
+      {/* Export + Logout */}
       <div className="p-4 pt-2" style={{ borderTop: `1px solid ${t.lightLine}` }}>
+        <button
+          onClick={() => setExportOpen(true)}
+          className="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 mb-2"
+          style={{
+            backgroundColor: t.btnBg,
+            color: t.btnFg,
+            minHeight: 44,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" />
+          </svg>
+          Export to PDF
+        </button>
         <button
           onClick={onLogout}
           className="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200"
@@ -171,6 +187,8 @@ export default function Sidebar({ onLogout }: SidebarProps) {
           Log out
         </button>
       </div>
+
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
     </div>
   );
 
