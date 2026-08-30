@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   THEMES,
   THEME_ORDER,
@@ -30,10 +31,13 @@ export default function Sidebar({ onLogout }: SidebarProps) {
   const t: ThemeColors = THEMES[theme];
   const streak = stats?.streak ?? 0;
 
-  const uniqueDates = entries
-    .map((e) => e.date)
-    .filter((v, i, a) => a.indexOf(v) === i)
-    .sort((a, b) => b.localeCompare(a));
+  const uniqueDates = useMemo(() => 
+    entries
+      .map((e) => e.date)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .sort((a, b) => b.localeCompare(a)),
+    [entries]
+  );
 
   const handleThemeChange = async (themeName: ThemeName) => {
     setTheme(themeName);

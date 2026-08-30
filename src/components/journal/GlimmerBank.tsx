@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { THEMES, type ThemeColors } from '@/lib/constants';
 import { useJournalStore } from '@/store/journal-store';
 import { updateEntry as updateEntrySvc } from '@/lib/supabase-service';
@@ -8,7 +9,7 @@ export default function GlimmerBank() {
   const { theme, entries } = useJournalStore();
   const t: ThemeColors = THEMES[theme];
 
-  const starred = entries.filter((e) => e.starred);
+  const starred = useMemo(() => entries.filter((e) => e.starred), [entries]);
 
   const handleToggleStar = async (entry: typeof starred[0]) => {
     try {

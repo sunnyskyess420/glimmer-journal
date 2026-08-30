@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   THEMES,
   PROMPTS,
@@ -48,7 +48,7 @@ export default function DailyEntry() {
   const [duration, setDuration] = useState('');
   const [response, setResponse] = useState('');
 
-  const dateEntries = entries.filter((e) => e.date === selectedDate);
+  const dateEntries = useMemo(() => entries.filter((e) => e.date === selectedDate), [entries, selectedDate]);
 
   const sectionsCompleted = useMemo(() => {
     if (selectedPrompt === null) return 0;
@@ -61,7 +61,7 @@ export default function DailyEntry() {
     return count;
   }, [selectedPrompt, preState, intensity, bodyLocation, tags, sleepQuality, stressLevel]);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setPreState('');
     setPostState('');
     setIntensity(0);
@@ -73,9 +73,9 @@ export default function DailyEntry() {
     setResponse('');
     setSelectedPrompt(null);
     setEditingEntry(null);
-  };
+  }, []);
 
-  const handleSelectPrompt = (idx: number) => {
+  const handleSelectPrompt = useCallback((idx: number) => {
     // Check if there's already an entry for this prompt on this date
     const existing = dateEntries.find((e) => e.promptIndex === idx);
     if (existing) {
