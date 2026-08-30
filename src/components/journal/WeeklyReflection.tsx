@@ -36,7 +36,6 @@ export default function WeeklyReflection() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [hasData, setHasData] = useState(false);
 
   const weekStart = useMemo(() => getWeekStart(currentDate), [currentDate]);
   const weekEntries = useJournalStore((s) =>
