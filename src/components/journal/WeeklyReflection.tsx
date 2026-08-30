@@ -28,7 +28,7 @@ function formatDateRange(weekStart: string): string {
 }
 
 export default function WeeklyReflection() {
-  const { theme, showToast } = useJournalStore();
+  const { theme, showToast, entries } = useJournalStore();
   const t: ThemeColors = THEMES[theme];
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -38,11 +38,13 @@ export default function WeeklyReflection() {
   const [saving, setSaving] = useState(false);
 
   const weekStart = useMemo(() => getWeekStart(currentDate), [currentDate]);
-  const weekEntries = useJournalStore((s) =>
-    s.entries.filter((e) => {
+  
+  // Memoize week entries to prevent recalculating on every render
+  const weekEntries = useMemo(() => 
+    entries.filter((e) => {
       const ws = getWeekStart(new Date(e.date + 'T12:00:00'));
       return ws === weekStart;
-    })
+    }), [entries, weekStart]
   );
 
   // Compute hasData based on both saved reflection and entries
