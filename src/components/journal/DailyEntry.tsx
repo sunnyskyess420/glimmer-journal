@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import {
   THEMES,
   PROMPTS,
@@ -61,7 +61,7 @@ export default function DailyEntry() {
     return count;
   }, [selectedPrompt, preState, intensity, bodyLocation, tags, sleepQuality, stressLevel]);
 
-  const resetForm = useCallback(() => {
+  const resetForm = () => {
     setPreState('');
     setPostState('');
     setIntensity(0);
@@ -73,7 +73,7 @@ export default function DailyEntry() {
     setResponse('');
     setSelectedPrompt(null);
     setEditingEntry(null);
-  }, []);
+  };
 
   const handleSelectPrompt = useCallback((idx: number) => {
     // Check if there's already an entry for this prompt on this date
