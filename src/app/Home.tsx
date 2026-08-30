@@ -56,6 +56,30 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []); // Footer rotation - forces new build
 
+  // Register service worker for PWA install support.
+  // Chrome/Brave require a registered SW with a fetch handler before they'll
+  // fire the `beforeinstallprompt` event (which the Sidebar's Install button
+  // listens for). Without this, the Install button never shows on Android.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+    // Only register in production — in dev, the SW interferes with HMR.
+    if (process.env.NODE_ENV !== 'production') return;
+
+    const register = () => {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .catch((err) => {
+          // Silent fail — PWA install just won't work, app still works fine
+          console.warn('SW registration failed:', err);
+        });
+    };
+
+    // Register on next tick so it doesn't block initial page paint
+    window.addEventListener('load', register);
+    return () => window.removeEventListener('load', register);
+  }, []);
+
   // Welcome message based on entry count
   const welcomeMessage = useMemo(() => {
     const total = store.totalEntries;
