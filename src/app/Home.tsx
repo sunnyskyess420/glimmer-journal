@@ -68,20 +68,20 @@ export default function Home() {
   const loadEntries = useCallback(async () => {
     try {
       const { entries, total } = await fetchEntries();
-      setEntries(entries, total);
+      useJournalStore.getState().setEntries(entries, total);
     } catch {
       // best effort
     }
-  }, [setEntries]);
+  }, []);
 
   const loadStats = useCallback(async () => {
     try {
       const stats = await fetchStats();
-      setStats(stats);
+      useJournalStore.getState().setStats(stats);
     } catch {
       // best effort
     }
-  }, [setStats]);
+  }, []);
 
   // Check Supabase session on mount
   useEffect(() => {
@@ -111,7 +111,7 @@ export default function Home() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [loadEntries, loadStats]);
 
   const handleAuth = useCallback(
     (userData: { id: string; email: string; name: string | null; theme: string }) => {
@@ -122,7 +122,7 @@ export default function Home() {
       loadEntries();
       loadStats();
     },
-    [setUser, setTheme, loadEntries, loadStats]
+    [loadEntries, loadStats, setUser, setTheme]
   );
 
   const handleLogout = useCallback(async () => {

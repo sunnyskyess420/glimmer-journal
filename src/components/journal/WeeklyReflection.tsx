@@ -46,6 +46,11 @@ export default function WeeklyReflection() {
     })
   );
 
+  // Compute hasData based on both saved reflection and entries
+  const hasData = useMemo(() => {
+    return saved || weekEntries.length > 0;
+  }, [saved, weekEntries.length]);
+
   useEffect(() => {
     setSaved(false);
     setResponses(['', '', '']);
@@ -57,17 +62,14 @@ export default function WeeklyReflection() {
         if (data?.responses) {
           setResponses(data.responses);
           setSaved(true);
-          setHasData(true);
-        } else {
-          setHasData(weekEntries.length > 0);
         }
       } catch {
-        setHasData(weekEntries.length > 0);
+        // Silently fail
       } finally {
         setLoading(false);
       }
     })();
-  }, [weekStart]); // Only depend on weekStart to prevent infinite loop
+  }, [weekStart]);
 
   const goWeek = (dir: number) => {
     setCurrentDate((d) => {
