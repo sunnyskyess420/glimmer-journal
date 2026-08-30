@@ -48,7 +48,7 @@ interface JournalStore {
   updateEntry: (id: string, data: Partial<GlimmerEntry>) => void;
   removeEntry: (id: string) => void;
   stats: Stats | null;
-  setStats: (stats: Stats) => void;
+  setStats: (stats: Stats | null) => void;
   theme: ThemeName;
   setTheme: (theme: ThemeName) => void;
   activeTab: string;

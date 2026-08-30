@@ -114,7 +114,7 @@ export default function DailyEntry() {
         intensity,
         duration,
         bodyLocation,
-        tags,
+        tags: JSON.stringify(tags),
         sleepQuality,
         stressLevel,
         starred: editingEntry?.starred ?? false,
