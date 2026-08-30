@@ -11,6 +11,7 @@ import {
 import { useJournalStore } from '@/store/journal-store';
 import { updateUserTheme } from '@/lib/supabase-service';
 import ExportDialog from './ExportDialog';
+import InstallHelpDialog from './InstallHelpDialog';
 
 // Minimal type for the BeforeInstallPromptEvent — Chrome fires this but TS doesn't ship a type for it.
 interface BeforeInstallPromptEvent extends Event {
@@ -38,11 +39,14 @@ export default function Sidebar({ onLogout }: SidebarProps) {
   const t: ThemeColors = THEMES[theme];
   const streak = stats?.streak ?? 0;
   const [exportOpen, setExportOpen] = useState(false);
+  const [installHelpOpen, setInstallHelpOpen] = useState(false);
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
 
-  // Capture the beforeinstallprompt event so we can trigger install on demand
-  // (Chrome fires this but doesn't always show the popup automatically).
+  // Capture the beforeinstallprompt event so we can trigger install on demand.
+  // Not all browsers fire this (notably iOS Safari never does, and Brave often
+  // requires Shields to be off). When it doesn't fire, the user taps the
+  // always-visible Install button and we show them manual instructions instead.
   useEffect(() => {
     const handler = (e: Event) => {
       e.preventDefault(); // stop Chrome's default mini-infobar so we control the flow
@@ -62,13 +66,18 @@ export default function Sidebar({ onLogout }: SidebarProps) {
   }, []);
 
   const handleInstallClick = async () => {
-    if (!installEvent) return;
-    installEvent.prompt();
-    const choice = await installEvent.userChoice;
-    if (choice.outcome === 'accepted') {
-      setInstalled(true);
+    // If the browser fired beforeinstallprompt, trigger the native install flow.
+    if (installEvent) {
+      installEvent.prompt();
+      const choice = await installEvent.userChoice;
+      if (choice.outcome === 'accepted') {
+        setInstalled(true);
+      }
+      setInstallEvent(null);
+      return;
     }
-    setInstallEvent(null); // can only be used once per page load
+    // Otherwise, show the manual install instructions for the user's browser.
+    setInstallHelpOpen(true);
   };
 
   const uniqueDates = useMemo(() => 
@@ -199,9 +208,11 @@ export default function Sidebar({ onLogout }: SidebarProps) {
 
       {/* Export + Install + Logout */}
       <div className="p-4 pt-2" style={{ borderTop: `1px solid ${t.lightLine}` }}>
-        {/* Install app button — only shown if Chrome has fired beforeinstallprompt
-            AND the app isn't already installed. */}
-        {installEvent && !installed && (
+        {/* Install app button — ALWAYS visible (unless already installed).
+            If the browser supports beforeinstallprompt, tapping this triggers
+            the native install dialog. If it doesn't (iOS Safari, Brave with
+            Shields up, etc.), tapping it opens a manual install guide. */}
+        {!installed && (
           <button
             onClick={handleInstallClick}
             className="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 mb-2"
@@ -221,8 +232,8 @@ export default function Sidebar({ onLogout }: SidebarProps) {
           onClick={() => setExportOpen(true)}
           className="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 mb-2"
           style={{
-            backgroundColor: installEvent && !installed ? t.hover : t.btnBg,
-            color: installEvent && !installed ? t.text : t.btnFg,
+            backgroundColor: installed ? t.btnBg : t.hover,
+            color: installed ? t.btnFg : t.text,
             minHeight: 44,
           }}
         >
@@ -245,6 +256,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       </div>
 
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
+      <InstallHelpDialog open={installHelpOpen} onClose={() => setInstallHelpOpen(false)} />
     </div>
   );
 
