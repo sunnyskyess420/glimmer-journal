@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   THEMES,
   THEME_ORDER,
@@ -11,6 +11,12 @@ import {
 import { useJournalStore } from '@/store/journal-store';
 import { updateUserTheme } from '@/lib/supabase-service';
 import ExportDialog from './ExportDialog';
+
+// Minimal type for the BeforeInstallPromptEvent — Chrome fires this but TS doesn't ship a type for it.
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 interface SidebarProps {
   onLogout: () => void;
@@ -32,6 +38,38 @@ export default function Sidebar({ onLogout }: SidebarProps) {
   const t: ThemeColors = THEMES[theme];
   const streak = stats?.streak ?? 0;
   const [exportOpen, setExportOpen] = useState(false);
+  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installed, setInstalled] = useState(false);
+
+  // Capture the beforeinstallprompt event so we can trigger install on demand
+  // (Chrome fires this but doesn't always show the popup automatically).
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault(); // stop Chrome's default mini-infobar so we control the flow
+      setInstallEvent(e as BeforeInstallPromptEvent);
+    };
+    const installedHandler = () => setInstalled(true);
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', installedHandler);
+    // If already running as installed PWA, hide the button entirely
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setInstalled(true);
+    }
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', installedHandler);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!installEvent) return;
+    installEvent.prompt();
+    const choice = await installEvent.userChoice;
+    if (choice.outcome === 'accepted') {
+      setInstalled(true);
+    }
+    setInstallEvent(null); // can only be used once per page load
+  };
 
   const uniqueDates = useMemo(() => 
     entries
@@ -159,14 +197,32 @@ export default function Sidebar({ onLogout }: SidebarProps) {
         )}
       </div>
 
-      {/* Export + Logout */}
+      {/* Export + Install + Logout */}
       <div className="p-4 pt-2" style={{ borderTop: `1px solid ${t.lightLine}` }}>
+        {/* Install app button — only shown if Chrome has fired beforeinstallprompt
+            AND the app isn't already installed. */}
+        {installEvent && !installed && (
+          <button
+            onClick={handleInstallClick}
+            className="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 mb-2"
+            style={{
+              backgroundColor: t.btnBg,
+              color: t.btnFg,
+              minHeight: 44,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v12" /><path d="m18 9-6 6-6-6" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            </svg>
+            Install app
+          </button>
+        )}
         <button
           onClick={() => setExportOpen(true)}
           className="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 mb-2"
           style={{
-            backgroundColor: t.btnBg,
-            color: t.btnFg,
+            backgroundColor: installEvent && !installed ? t.hover : t.btnBg,
+            color: installEvent && !installed ? t.text : t.btnFg,
             minHeight: 44,
           }}
         >
