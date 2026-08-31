@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { GlimmerEntry, Stats } from '@/store/journal-store';
+import { localDateISO } from '@/lib/utils';
 
 // ---- Auth ----
 
@@ -243,7 +244,7 @@ export async function fetchStats(): Promise<Stats> {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = localDateISO(d);
     const dayEntries = entries.filter((e: Record<string, unknown>) => e.date === dateStr);
     const dayWithIntensity = dayEntries.filter((e: Record<string, unknown>) => (e.intensity as number) > 0);
     last7.push({
@@ -259,13 +260,13 @@ export async function fetchStats(): Promise<Stats> {
   let streak = 0;
   const checkDate = new Date(today);
   for (let i = 0; i < 365; i++) {
-    const ds = checkDate.toISOString().split('T')[0];
+    const ds = localDateISO(checkDate);
     if (entryDates.includes(ds)) {
       streak++;
       checkDate.setDate(checkDate.getDate() - 1);
     } else if (i === 0) {
       checkDate.setDate(checkDate.getDate() - 1);
-      const yds = checkDate.toISOString().split('T')[0];
+      const yds = localDateISO(checkDate);
       if (entryDates.includes(yds)) {
         streak++;
         checkDate.setDate(checkDate.getDate() - 1);

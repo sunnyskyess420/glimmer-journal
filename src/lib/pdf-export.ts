@@ -805,11 +805,12 @@ export async function exportJournalToPdf(
     addPageNumbers(doc);
 
     // Filename: glimmer-journal_YYYY-MM-DD_range.pdf
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const rangeSlug = options.startDate || options.endDate
       ? `_${(options.startDate || '').replace(/-/g, '')}-${(options.endDate || '').replace(/-/g, '')}`
       : '';
-    const filename = `glimmer-journal_${today}${rangeSlug}.pdf`;
+    const filename = `glimmer-journal_${todayStr}${rangeSlug}.pdf`;
     doc.save(filename);
     return { success: true };
   } catch (err) {

@@ -8,6 +8,7 @@ import {
 import { useJournalStore } from '@/store/journal-store';
 import { fetchAllReflections, type WeeklyReflectionRecord } from '@/lib/supabase-service';
 import { exportJournalToPdf, type ExportOptions } from '@/lib/pdf-export';
+import { localDateISO } from '@/lib/utils';
 
 interface ExportDialogProps {
   open: boolean;
@@ -55,15 +56,15 @@ export default function ExportDialog({ open, onClose }: ExportDialogProps) {
   if (rangePreset === '7') {
     const d = new Date(today);
     d.setDate(d.getDate() - 6);
-    startDate = d.toISOString().split('T')[0];
+    startDate = localDateISO(d);
   } else if (rangePreset === '30') {
     const d = new Date(today);
     d.setDate(d.getDate() - 29);
-    startDate = d.toISOString().split('T')[0];
+    startDate = localDateISO(d);
   } else if (rangePreset === '90') {
     const d = new Date(today);
     d.setDate(d.getDate() - 89);
-    startDate = d.toISOString().split('T')[0];
+    startDate = localDateISO(d);
   } else if (rangePreset === 'ytd') {
     startDate = `${today.getFullYear()}-01-01`;
   } else if (rangePreset === 'custom') {

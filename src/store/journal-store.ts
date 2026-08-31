@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ThemeName } from '@/lib/constants';
+import { localDateISO } from '@/lib/utils';
 
 export interface User {
   id: string;
@@ -91,7 +92,7 @@ export const useJournalStore = create<JournalStore>((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  selectedDate: new Date().toISOString().split('T')[0],
+  selectedDate: localDateISO(),
   setSelectedDate: (date) => set({ selectedDate: date }),
   toastMessage: null,
   showToast: (msg) => {

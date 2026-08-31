@@ -9,13 +9,14 @@ import {
 } from '@/lib/constants';
 import { useJournalStore } from '@/store/journal-store';
 import { fetchReflection, saveReflection as saveReflectionSvc } from '@/lib/supabase-service';
+import { localWeekStart } from '@/lib/utils';
 
+// Keep local getWeekStart for backward-compatibility inside this file — but
+// delegate to the timezone-correct localWeekStart helper. Old version used
+// toISOString() which returned UTC date and caused week boundaries to drift
+// a day off from the user's local calendar.
 function getWeekStart(date: Date): string {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  return d.toISOString().split('T')[0];
+  return localWeekStart(date);
 }
 
 function formatDateRange(weekStart: string): string {
