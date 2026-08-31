@@ -312,6 +312,29 @@ export default function DailyEntry() {
           {/* Full prompt text */}
           <p className="text-sm italic" style={{ color: t.muted }}>{PROMPTS[selectedPrompt]}</p>
 
+          {/* Response textarea */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold" style={{ color: t.text }}>
+              Your glimmer
+            </label>
+            <textarea
+              value={response}
+              onChange={(e) => setResponse(e.target.value)}
+              placeholder="Describe what you noticed..."
+              rows={5}
+              className="w-full px-3 py-3 rounded-xl text-sm outline-none resize-y"
+              style={{
+                backgroundColor: t.hover,
+                border: `1px solid ${t.lightLine}`,
+                color: t.text,
+                minHeight: 120,
+                transition: 'border-color 0.2s',
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = t.border)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = t.lightLine)}
+            />
+          </div>
+
           {/* Section 1: Nervous System State */}
           <section className="rounded-xl p-4 flex flex-col gap-3" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.lightLine}` }}>
             <h4 className="text-sm font-semibold">Nervous System State</h4>
@@ -466,29 +489,6 @@ export default function DailyEntry() {
             </div>
             <p className="text-xs" style={{ color: t.muted }}>{SECTION_HELPERS[5]}</p>
           </section>
-
-          {/* Response textarea */}
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold" style={{ color: t.text }}>
-              Your glimmer
-            </label>
-            <textarea
-              value={response}
-              onChange={(e) => setResponse(e.target.value)}
-              placeholder="Describe what you noticed..."
-              rows={5}
-              className="w-full px-3 py-3 rounded-xl text-sm outline-none resize-y"
-              style={{
-                backgroundColor: t.hover,
-                border: `1px solid ${t.lightLine}`,
-                color: t.text,
-                minHeight: 120,
-                transition: 'border-color 0.2s',
-              }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = t.border)}
-              onBlur={(e) => (e.currentTarget.style.borderColor = t.lightLine)}
-            />
-          </div>
 
           {/* Action buttons */}
           <div className="flex items-center gap-3">
