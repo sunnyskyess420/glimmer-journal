@@ -124,7 +124,7 @@ function writeParagraph(
   const color = opts.color ?? TEXT_RGB;
   const lineHeight = opts.lineHeight ?? LINE_HEIGHT;
   const indent = opts.indent ?? 0;
-  const gapAfter = opts.gapAfter ?? 4;
+  const gapAfter = opts.gapAfter ?? 6;
 
   doc.setFont(font, style);
   doc.setFontSize(fontSize);
@@ -345,9 +345,9 @@ function renderOverview(
     doc.setFontSize(BODY_FONT_SIZE);
     const maxState = stateEntries[0][1];
     stateEntries.forEach(([state, count]) => {
-      ensureSpace(doc, cursor, 14);
+      ensureSpace(doc, cursor, 20);
       // Truncate label if too long
-      const label = state.length > 14 ? state.substring(0, 13) + '.' : state;
+      const label = state.length > 16 ? state.substring(0, 15) + '...' : state;
       doc.setFont('helvetica', 'bold');
       setTextColor(doc, TEXT_RGB);
       doc.text(label, MARGIN, cursor.y);
@@ -362,16 +362,16 @@ function renderOverview(
       doc.setFont('helvetica', 'normal');
       setTextColor(doc, MUTED_RGB);
       doc.text(String(count), barX + barMax + 8, cursor.y);
-      cursor.y += 16;
+      cursor.y += 18;
     });
-    cursor.y += 6;
+    cursor.y += 10;
   }
 
   // State shifts (pre -> post)
   const shifts: Record<string, number> = {};
   filteredEntries.forEach((e) => {
     if (e.preState && e.postState && e.preState !== e.postState) {
-      const key = `${e.preState}  ->  ${e.postState}`;
+      const key = `${e.preState}  →  ${e.postState}`;
       shifts[key] = (shifts[key] || 0) + 1;
     }
   });
@@ -382,16 +382,22 @@ function renderOverview(
     setTextColor(doc, TEXT_RGB);
     ensureSpace(doc, cursor, 24);
     doc.text('Most common state shifts', MARGIN, cursor.y);
-    cursor.y += 16;
+    cursor.y += 18;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(BODY_FONT_SIZE);
     setTextColor(doc, MUTED_RGB);
     shiftEntries.forEach(([shift, count]) => {
-      ensureSpace(doc, cursor, 14);
-      doc.text(`${shift}  —  ${count}×`, MARGIN, cursor.y);
-      cursor.y += 14;
+      ensureSpace(doc, cursor, 18);
+      const shiftLine = `${shift}  —  ${count}×`;
+      const shiftLines = splitText(doc, shiftLine, BODY_FONT_SIZE, CONTENT_WIDTH);
+      shiftLines.forEach((line) => {
+        ensureSpace(doc, cursor, 14);
+        doc.text(line, MARGIN, cursor.y);
+        cursor.y += 14;
+      });
+      cursor.y += 2;
     });
-    cursor.y += 6;
+    cursor.y += 10;
   }
 
   // Top tags
@@ -409,16 +415,16 @@ function renderOverview(
     setTextColor(doc, TEXT_RGB);
     ensureSpace(doc, cursor, 24);
     doc.text('Top context tags', MARGIN, cursor.y);
-    cursor.y += 16;
+    cursor.y += 18;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(BODY_FONT_SIZE);
     setTextColor(doc, MUTED_RGB);
     const tagsLine = topTags.map(([t, c]) => `${t} (${c})`).join('   |   ');
     const tagLines = splitText(doc, tagsLine, BODY_FONT_SIZE, CONTENT_WIDTH);
     tagLines.forEach((line) => {
-      ensureSpace(doc, cursor, 14);
+      ensureSpace(doc, cursor, 16);
       doc.text(line, MARGIN, cursor.y);
-      cursor.y += 14;
+      cursor.y += 16;
     });
   }
 
@@ -672,9 +678,9 @@ function renderGlimmerBank(
   const introLines = splitText(doc, intro, SMALL_FONT_SIZE, CONTENT_WIDTH);
   introLines.forEach((line) => {
     doc.text(line, MARGIN, cursor.y);
-    cursor.y += 12;
+    cursor.y += 14;
   });
-  cursor.y += 8;
+  cursor.y += 10;
 
   const sorted = [...starred].sort((a, b) => b.date.localeCompare(a.date));
   sorted.forEach((entry) => renderEntry(doc, cursor, entry, { compact: true }));
@@ -720,11 +726,11 @@ function renderWeekly(
       setTextColor(doc, MUTED_RGB);
       const promptLines = splitText(doc, prompt, SMALL_FONT_SIZE, CONTENT_WIDTH);
       promptLines.forEach((line) => {
-        ensureSpace(doc, cursor, 12);
+        ensureSpace(doc, cursor, 14);
         doc.text(line, MARGIN, cursor.y);
-        cursor.y += 12;
+        cursor.y += 13;
       });
-      cursor.y += 2;
+      cursor.y += 6;
       // Response
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(BODY_FONT_SIZE);
@@ -735,9 +741,9 @@ function renderWeekly(
         doc.text(line, MARGIN + 16, cursor.y);
         cursor.y += LINE_HEIGHT;
       });
-      cursor.y += 12;
+      cursor.y += 14;
     });
-    cursor.y += 8;
+    cursor.y += 10;
   });
 }
 
