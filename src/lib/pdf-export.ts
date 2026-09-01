@@ -52,6 +52,7 @@ const H1_SIZE = 22;
 const H2_SIZE = 15;
 const H3_SIZE = 12;
 const LINE_HEIGHT = 14;
+const META_ROW_HEIGHT = 18;
 const ACCENT_RGB: [number, number, number] = [90, 138, 74]; // sage green — calming, clinical-neutral
 const TEXT_RGB: [number, number, number] = [40, 40, 40];
 const MUTED_RGB: [number, number, number] = [110, 110, 110];
@@ -452,28 +453,29 @@ function renderEntry(
 
   // --- Measurement pass (no drawing) ---
   let measureY = 0;
-  measureY += 14; // top padding
+  measureY += 16; // top padding
   // Header row (date + label + star) — single line
-  measureY += 14;
+  measureY += 16;
   // Prompt (italic, small)
   measureY += splitTextHeight(doc, PROMPTS[entry.promptIndex] || entry.promptLabel, SMALL_FONT_SIZE, innerW) * 12;
-  measureY += 4;
+  measureY += 6;
   // Response (body)
   measureY += splitTextHeight(doc, entry.response, BODY_FONT_SIZE, innerW) * LINE_HEIGHT;
-  measureY += 6;
+  measureY += 10;
   if (!compact) {
     // Metadata grid: 3 rows × 2 cols
-    measureY += Math.ceil(6 / 2) * 13 + 8;
+    measureY += Math.ceil(6 / 2) * META_ROW_HEIGHT + 6;
     // Tags
     let tags: string[] = [];
     try { tags = JSON.parse(entry.tags || '[]') as string[]; } catch { /* ignore */ }
     if (tags.length > 0) {
+      measureY += 4; // separator gap
       const tagsStr = tags.join('  ·  ');
       measureY += splitTextHeight(doc, tagsStr, SMALL_FONT_SIZE, innerW - 30) * 12;
-      measureY += 4;
+      measureY += 6;
     }
   }
-  measureY += 8; // bottom padding
+  measureY += 10; // bottom padding
 
   const cardH = measureY;
 
@@ -491,7 +493,7 @@ function renderEntry(
   doc.roundedRect(cardX, startY, 4, cardH, 2, 2, 'F');
 
   // --- Write content ---
-  cursor.y = startY + 14;
+  cursor.y = startY + 16;
 
   // Header line: date + prompt label + star
   doc.setFont('helvetica', 'bold');
@@ -514,7 +516,7 @@ function renderEntry(
     const starX = cardX + cardW - padRight - doc.getTextWidth(starText);
     doc.text(starText, starX, cursor.y);
   }
-  cursor.y += 14;
+  cursor.y += 16;
 
   // Prompt question (italic)
   const promptText = PROMPTS[entry.promptIndex] || entry.promptLabel;
@@ -526,7 +528,7 @@ function renderEntry(
     doc.text(line, cardX + padLeft, cursor.y);
     cursor.y += 12;
   });
-  cursor.y += 4;
+  cursor.y += 6;
 
   // The response (the actual glimmer)
   doc.setFont('helvetica', 'normal');
@@ -537,7 +539,7 @@ function renderEntry(
     doc.text(line, cardX + padLeft, cursor.y);
     cursor.y += LINE_HEIGHT;
   });
-  cursor.y += 6;
+  cursor.y += 10;
 
   if (!compact) {
     // Metadata grid: two columns of key/value
@@ -545,7 +547,7 @@ function renderEntry(
     const metaColW = innerW / 2;
 
     const rows: { label: string; value: string }[] = [];
-    const stateLine = [entry.preState, entry.postState].filter(Boolean).join('  ->  ');
+    const stateLine = [entry.preState, entry.postState].filter(Boolean).join('  →  ');
     rows.push({ label: 'Nervous system', value: stateLine || '—' });
     rows.push({ label: 'Intensity', value: entry.intensity > 0 ? `${entry.intensity}/5  ${INTENSITY_LABELS[entry.intensity - 1] || ''}` : '—' });
     rows.push({ label: 'Body location', value: entry.bodyLocation || '—' });
@@ -557,23 +559,33 @@ function renderEntry(
       const col = i % 2;
       const rowIdx = Math.floor(i / 2);
       const x = metaX + col * metaColW;
-      const y = cursor.y + rowIdx * 13;
+      const y = cursor.y + rowIdx * META_ROW_HEIGHT;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(SMALL_FONT_SIZE);
       setTextColor(doc, MUTED_RGB);
       doc.text(`${row.label}:`, x, y);
       doc.setFont('helvetica', 'normal');
       setTextColor(doc, TEXT_RGB);
-      const valueX = x + doc.getTextWidth(`${row.label}: `);
-      const valueLines = splitText(doc, row.value, SMALL_FONT_SIZE, metaColW - doc.getTextWidth(`${row.label}: `));
+      // Fixed label column width for clean alignment
+      const labelW = 72;
+      const valueX = x + labelW;
+      const valueMaxW = metaColW - labelW;
+      const valueLines = splitText(doc, row.value, SMALL_FONT_SIZE, valueMaxW);
       doc.text(valueLines[0] || '—', valueX, y);
     });
-    cursor.y += Math.ceil(rows.length / 2) * 13 + 8;
+    cursor.y += Math.ceil(rows.length / 2) * META_ROW_HEIGHT + 6;
 
-    // Tags
+    // Tags — separated by a subtle divider
     let tags: string[] = [];
     try { tags = JSON.parse(entry.tags || '[]') as string[]; } catch { /* ignore */ }
     if (tags.length > 0) {
+      // Subtle separator line
+      cursor.y += 2;
+      doc.setDrawColor(...LIGHT_LINE_RGB);
+      doc.setLineWidth(0.3);
+      doc.line(metaX, cursor.y, metaX + innerW, cursor.y);
+      cursor.y += 6;
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(SMALL_FONT_SIZE);
       setTextColor(doc, MUTED_RGB);
@@ -590,7 +602,7 @@ function renderEntry(
         }
         cursor.y += 12;
       });
-      cursor.y += 4;
+      cursor.y += 2;
     }
   }
 
