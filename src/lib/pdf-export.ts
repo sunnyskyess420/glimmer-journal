@@ -506,12 +506,14 @@ function renderEntry(
   doc.setFontSize(BODY_FONT_SIZE);
   setTextColor(doc, TEXT_RGB);
   const dateStr = formatDateLong(entry.date);
+  // Measure date width BEFORE changing font (date is rendered at 10pt bold)
+  const dateTextWidth = doc.getTextWidth(dateStr);
   doc.text(dateStr, cardX + padLeft, cursor.y);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(SMALL_FONT_SIZE);
   setTextColor(doc, ACCENT_RGB);
-  const labelX = cardX + padLeft + doc.getTextWidth(dateStr) + 14;
+  const labelX = cardX + padLeft + dateTextWidth + 14;
   doc.text(`-  ${entry.promptLabel}`, labelX, cursor.y);
 
   if (entry.starred) {
