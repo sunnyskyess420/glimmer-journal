@@ -38,7 +38,6 @@ export default function StatsView() {
 
   // 7-day bar chart
   const last7 = stats.last7 || [];
-  const maxCount = Math.max(...last7.map((d) => d.count), 1);
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,39 +70,97 @@ export default function StatsView() {
             border: `1px solid ${t.lightLine}`,
           }}
         >
-          <h3 className="text-sm font-semibold mb-4" style={{ color: t.text }}>
-            7-Day Trend
-          </h3>
-          <div className="flex items-end gap-2" style={{ height: 120 }}>
-            {last7.map((day) => {
-              const barH = maxCount > 0 ? (day.count / maxCount) * 100 : 0;
-              return (
-                <div
-                  key={day.date}
-                  className="flex-1 flex flex-col items-center gap-1"
-                  style={{ height: '100%' }}
-                >
-                  {day.avgIntensity > 0 && (
-                    <span className="text-xs" style={{ color: t.muted }}>
-                      {day.avgIntensity.toFixed(1)}
-                    </span>
-                  )}
+          <div className="flex items-baseline justify-between mb-1">
+            <h3 className="text-sm font-semibold" style={{ color: t.text }}>
+              7-Day Trend
+            </h3>
+            <span className="text-[10px]" style={{ color: t.muted }}>
+              Average intensity, 1–5
+            </span>
+          </div>
+          <p className="text-[10px] mb-4" style={{ color: t.muted, opacity: 0.8 }}>
+            Bar height shows how strong your glimmers felt that day. The small count below the day is how many you noticed.
+          </p>
+          <div className="relative" style={{ height: 140 }}>
+            {/* Subtle reference line at the midpoint (intensity 3 of 5) —
+                gives the eye a baseline so it's easier to see at a glance
+                whether a day was above or below "moderate". */}
+            <div
+              aria-hidden
+              className="absolute left-0 right-0"
+              style={{
+                bottom: '60%', // intensity 3 of 5 = 60% of chart height
+                borderBottom: `1px dashed ${t.lightLine}`,
+                opacity: 0.6,
+              }}
+            />
+            <div
+              aria-hidden
+              className="absolute right-0 text-[9px]"
+              style={{
+                bottom: 'calc(60% + 2px)',
+                color: t.muted,
+                opacity: 0.7,
+              }}
+            >
+              mid (3)
+            </div>
+            <div className="flex items-end gap-2 h-full">
+              {last7.map((day) => {
+                // Bar height = avg intensity / 5, so 5 = full bar, 0 = no bar.
+                // This matches the number shown above the bar — no more
+                // "2.3 and 3.0 at the same height" mismatch.
+                const hasData = day.avgIntensity > 0;
+                const barH = hasData ? (day.avgIntensity / 5) * 100 : 0;
+                return (
                   <div
-                    className="w-full rounded-t-md transition-all duration-300"
-                    style={{
-                      height: `${Math.max(barH, 4)}%`,
-                      backgroundColor: t.btnBg,
-                      marginTop: 'auto',
-                    }}
-                  />
-                  <span className="text-xs" style={{ color: t.muted }}>
-                    {new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', {
-                      weekday: 'short',
-                    })}
-                  </span>
-                </div>
-              );
-            })}
+                    key={day.date}
+                    className="flex-1 flex flex-col items-center gap-1 h-full"
+                  >
+                    {/* Intensity number — only on days with data */}
+                    {hasData && (
+                      <span
+                        className="text-xs font-medium tabular-nums"
+                        style={{ color: t.text }}
+                      >
+                        {day.avgIntensity.toFixed(1)}
+                      </span>
+                    )}
+                    {/* Bar — height = intensity / 5. Empty days render no bar
+                        (just whitespace) so the visual stays honest: no bar
+                        means no entries. */}
+                    <div
+                      className="w-full flex-1 flex items-end"
+                      style={{ minHeight: 0 }}
+                    >
+                      {hasData && (
+                        <div
+                          className="w-full rounded-t-md transition-all duration-300"
+                          style={{
+                            height: `${barH}%`,
+                            backgroundColor: t.btnBg,
+                          }}
+                        />
+                      )}
+                    </div>
+                    {/* Day label + entry count below it. The count tells the
+                        user how many glimmers they noticed that day — keeps
+                        the activity info without confusing it with intensity. */}
+                    <span className="text-xs" style={{ color: t.muted }}>
+                      {new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', {
+                        weekday: 'short',
+                      })}
+                    </span>
+                    <span
+                      className="text-[9px] tabular-nums"
+                      style={{ color: t.muted, opacity: 0.7 }}
+                    >
+                      {day.count > 0 ? `${day.count}×` : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
