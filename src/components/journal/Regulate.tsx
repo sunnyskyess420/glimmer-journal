@@ -18,18 +18,11 @@ import {
 } from '@/lib/regulate-content';
 import { useJournalStore } from '@/store/journal-store';
 
-export default function Regulate() {
-  const { theme, showToast } = useJournalStore();
-  const t: ThemeColors = THEMES[theme];
-
-  // Check-in
-  const [zone, setZone] = useState<ZoneId | null>(null);
-
-  // Coping skills menu
-  const [openRecipe, setOpenRecipe] = useState<string | null>(null);
-  const [energy, setEnergy] = useState<string | null>(null);
-
-  // Practice log (localStorage, loaded after mount to avoid hydration mismatch)
+// Shared practice log. Both pages (Check-in and Toolbox) read and write the
+// same localStorage log, so a skill marked done on one page shows up in the
+// other page's counts the next time you open it.
+function usePracticeLog() {
+  const { showToast } = useJournalStore();
   const [log, setLog] = useState<Record<string, string[]>>({});
   const [logReady, setLogReady] = useState(false);
 
@@ -38,33 +31,17 @@ export default function Regulate() {
     setLogReady(true);
   }, []);
 
-  const todayCount = logReady ? log[localToday()]?.length ?? 0 : 0;
+  const doneToday = useMemo(
+    () => new Set(logReady ? log[localToday()] ?? [] : []),
+    [log, logReady]
+  );
+  const todayCount = doneToday.size;
   const weekCount = useMemo(() => {
     if (!logReady) return 0;
-    const dates = recentDates(7);
-    return dates.reduce((n, d) => n + (log[d]?.length ?? 0), 0);
+    return recentDates(7).reduce((n, d) => n + (log[d]?.length ?? 0), 0);
   }, [log, logReady]);
 
-  const doneToday = useMemo(() => new Set(logReady ? log[localToday()] ?? [] : []), [log, logReady]);
-
-  // Concrete, loggable actions shown in the check-in panel for the selected zone.
-  const tryNow = useMemo(() => {
-    if (!zone) return [];
-    const z = NS_ZONES.find((x) => x.id === zone);
-    if (!z) return [];
-    const [a, b] = z.matchingRecipes;
-    const ra = RECIPES.find((r) => r.id === a);
-    const rb = RECIPES.find((r) => r.id === b);
-    return [...(ra ? ra.skills.slice(0, 3) : []), ...(rb ? rb.skills.slice(0, 1) : [])].slice(0, 4);
-  }, [zone]);
-
-  const highlightedRecipes = useMemo(() => {
-    if (!energy) return new Set<string>();
-    const pick = ENERGY_PICKS.find((p) => p.id === energy);
-    return new Set(pick ? pick.recipeIds : []);
-  }, [energy]);
-
-  const togglePracticed = (skill: string) => {
+  const toggle = (skill: string) => {
     const today = localToday();
     const updated = { ...log };
     const list = [...(updated[today] ?? [])];
@@ -80,30 +57,99 @@ export default function Regulate() {
     savePracticeLog(updated);
   };
 
-  const handleEnergyPick = (id: string) => {
-    if (energy === id) {
-      setEnergy(null);
-      return;
-    }
-    setEnergy(id);
-    const pick = ENERGY_PICKS.find((p) => p.id === id);
-    if (pick && pick.recipeIds.length > 0) {
-      setOpenRecipe(pick.recipeIds[0]);
-    }
-  };
+  return { doneToday, todayCount, weekCount, toggle };
+}
 
-  const chipStyle = (active: boolean): React.CSSProperties => ({
-    backgroundColor: active ? t.btnBg : t.hover,
-    color: active ? t.btnFg : t.text,
-    border: active ? 'none' : `1px solid ${t.lightLine}`,
-    minHeight: 44,
-    padding: '6px 12px',
-    borderRadius: 8,
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'all 0.15s',
-  });
+function localToday(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+// --- Shared bits -------------------------------------------------------------
+
+function DoneButton({
+  done,
+  onToggle,
+  cardBg,
+}: {
+  done: boolean;
+  onToggle: () => void;
+  cardBg: string;
+}) {
+  const t: ThemeColors = THEMES[useJournalStore((s) => s.theme)];
+  return (
+    <button
+      onClick={onToggle}
+      aria-pressed={done}
+      className="shrink-0 flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium"
+      style={{
+        minHeight: 44,
+        minWidth: 92,
+        padding: '0 14px',
+        backgroundColor: done ? t.btnBg : cardBg,
+        color: done ? t.btnFg : t.text,
+        border: done ? 'none' : `1px solid ${t.lightLine}`,
+        transition: 'all 0.15s',
+      }}
+    >
+      {done && (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      )}
+      {done ? 'Done' : 'Mark done'}
+    </button>
+  );
+}
+
+function SkillRow({
+  skill,
+  first,
+  dividerColor,
+  done,
+  onToggle,
+}: {
+  skill: string;
+  first: boolean;
+  dividerColor: string;
+  done: boolean;
+  onToggle: () => void;
+}) {
+  const t: ThemeColors = THEMES[useJournalStore((s) => s.theme)];
+  return (
+    <div
+      className="flex items-center justify-between gap-3 py-2.5"
+      style={{ borderTop: first ? 'none' : `1px solid ${dividerColor}` }}
+    >
+      <span className="text-sm" style={{ color: t.text }}>{skill}</span>
+      <DoneButton done={done} onToggle={onToggle} cardBg={t.hover} />
+    </div>
+  );
+}
+
+// --- Page 1: Check-in --------------------------------------------------------
+
+export function CheckIn() {
+  const { theme } = useJournalStore();
+  const setActiveTab = useJournalStore((s) => s.setActiveTab);
+  const t: ThemeColors = THEMES[theme];
+  const { doneToday, todayCount, weekCount, toggle } = usePracticeLog();
+
+  const [zone, setZone] = useState<ZoneId | null>(null);
+
+  // Concrete, loggable actions shown in the detail panel for the selected zone.
+  const tryNow = useMemo(() => {
+    if (!zone) return [];
+    const z = NS_ZONES.find((x) => x.id === zone);
+    if (!z) return [];
+    const [a, b] = z.matchingRecipes;
+    const ra = RECIPES.find((r) => r.id === a);
+    const rb = RECIPES.find((r) => r.id === b);
+    return [...(ra ? ra.skills.slice(0, 3) : []), ...(rb ? rb.skills.slice(0, 1) : [])].slice(0, 4);
+  }, [zone]);
 
   const activeZone = zone ? NS_ZONES.find((z) => z.id === zone) ?? null : null;
 
@@ -125,7 +171,7 @@ export default function Regulate() {
         </p>
       </section>
 
-      {/* Section 1: Window of Tolerance check-in */}
+      {/* Window of Tolerance check-in */}
       <section className="flex flex-col gap-4">
         <div>
           <h2 className="text-lg font-semibold" style={{ color: t.text }}>
@@ -220,62 +266,34 @@ export default function Regulate() {
                     {activeZone.id === 'window' ? 'Keep the streak of feeling okay' : 'Try one now'}
                   </h4>
                   <div className="flex flex-col mt-1">
-                    {tryNow.map((skill, idx) => {
-                      const done = doneToday.has(skill);
-                      return (
-                        <div
-                          key={skill}
-                          className="flex items-center justify-between gap-3 py-2"
-                          style={{ borderTop: idx > 0 ? `1px solid ${t.lightLine}` : 'none' }}
-                        >
-                          <span className="text-sm" style={{ color: t.text }}>{skill}</span>
-                          <button
-                            onClick={() => togglePracticed(skill)}
-                            aria-pressed={done}
-                            className="shrink-0 flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium"
-                            style={{
-                              minHeight: 44,
-                              minWidth: 92,
-                              padding: '0 14px',
-                              backgroundColor: done ? t.btnBg : t.cardBg,
-                              color: done ? t.btnFg : t.text,
-                              border: done ? 'none' : `1px solid ${t.lightLine}`,
-                              transition: 'all 0.15s',
-                            }}
-                          >
-                            {done && (
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                            {done ? 'Done' : 'Mark done'}
-                          </button>
-                        </div>
-                      );
-                    })}
+                    {tryNow.map((skill, idx) => (
+                      <SkillRow
+                        key={skill}
+                        skill={skill}
+                        first={idx === 0}
+                        dividerColor={t.lightLine}
+                        done={doneToday.has(skill)}
+                        onToggle={() => toggle(skill)}
+                      />
+                    ))}
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap mt-2">
-                    <span className="text-xs" style={{ color: t.muted }}>Full menu:</span>
-                    {activeZone.matchingRecipes.map((rid) => {
-                      const r = RECIPES.find((x) => x.id === rid);
-                      if (!r) return null;
-                      return (
-                        <button
-                          key={rid}
-                          onClick={() => setOpenRecipe(rid)}
-                          className="text-xs font-medium px-3 rounded-lg inline-flex items-center"
-                          style={{
-                            minHeight: 44,
-                            backgroundColor: t.cardBg,
-                            color: t.text,
-                            border: `1px solid ${t.lightLine}`,
-                            transition: 'all 0.15s',
-                          }}
-                        >
-                          {r.name}
-                        </button>
-                      );
-                    })}
+                  <div className="flex justify-end mt-2">
+                    <button
+                      onClick={() => setActiveTab('toolbox')}
+                      className="text-xs font-medium px-3 rounded-lg inline-flex items-center gap-1.5"
+                      style={{
+                        minHeight: 44,
+                        backgroundColor: t.cardBg,
+                        color: t.text,
+                        border: `1px solid ${t.lightLine}`,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      Open the full Toolbox
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
 
@@ -309,129 +327,145 @@ export default function Regulate() {
           </p>
         </section>
       </section>
+    </div>
+  );
+}
 
-      {/* Section 2: Coping skills menu */}
-      <section className="flex flex-col gap-4">
+// --- Page 2: Toolbox ---------------------------------------------------------
+
+export function Toolbox() {
+  const { theme } = useJournalStore();
+  const t: ThemeColors = THEMES[theme];
+  const { doneToday, todayCount, toggle } = usePracticeLog();
+
+  const [openRecipe, setOpenRecipe] = useState<string | null>(null);
+  const [energy, setEnergy] = useState<string | null>(null);
+
+  const highlightedRecipes = useMemo(() => {
+    if (!energy) return new Set<string>();
+    const pick = ENERGY_PICKS.find((p) => p.id === energy);
+    return new Set(pick ? pick.recipeIds : []);
+  }, [energy]);
+
+  const handleEnergyPick = (id: string) => {
+    if (energy === id) {
+      setEnergy(null);
+      return;
+    }
+    setEnergy(id);
+    const pick = ENERGY_PICKS.find((p) => p.id === id);
+    if (pick && pick.recipeIds.length > 0) {
+      setOpenRecipe(pick.recipeIds[0]);
+    }
+  };
+
+  const chipStyle = (active: boolean): React.CSSProperties => ({
+    backgroundColor: active ? t.btnBg : t.hover,
+    color: active ? t.btnFg : t.text,
+    border: active ? 'none' : `1px solid ${t.lightLine}`,
+    minHeight: 44,
+    padding: '6px 12px',
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+  });
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Heading + today's count */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold" style={{ color: t.text }}>
-            Coping skills menu
+            Toolbox
           </h2>
           <p className="text-sm mt-1 max-w-2xl" style={{ color: t.muted }}>
             Pick one skill, not five. After using it, notice whether your body feels calmer, more grounded, or slightly lighter.
           </p>
         </div>
+        <span className="text-xs shrink-0" style={{ color: t.muted }}>{todayCount} tried today</span>
+      </div>
 
-        {/* Choose by energy level */}
-        <div>
-          <p className="text-xs font-medium mb-2" style={{ color: t.muted }}>Choose based on how you feel right now</p>
-          <div className="flex flex-wrap gap-2">
-            {ENERGY_PICKS.map((pick) => (
+      {/* Choose by energy level */}
+      <div>
+        <p className="text-xs font-medium mb-2" style={{ color: t.muted }}>Choose based on how you feel right now</p>
+        <div className="flex flex-wrap gap-2">
+          {ENERGY_PICKS.map((pick) => (
+            <button
+              key={pick.id}
+              onClick={() => handleEnergyPick(pick.id)}
+              aria-pressed={energy === pick.id}
+              style={chipStyle(energy === pick.id)}
+            >
+              {pick.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Recipe accordion */}
+      <div className="flex flex-col gap-3">
+        {RECIPES.map((recipe) => {
+          const open = openRecipe === recipe.id;
+          const highlighted = highlightedRecipes.has(recipe.id);
+          return (
+            <div
+              key={recipe.id}
+              className="rounded-xl overflow-hidden"
+              style={{
+                backgroundColor: t.cardBg,
+                border: highlighted ? `2px solid ${t.border}` : `1px solid ${t.lightLine}`,
+                transition: 'border-color 0.15s',
+              }}
+            >
               <button
-                key={pick.id}
-                onClick={() => handleEnergyPick(pick.id)}
-                aria-pressed={energy === pick.id}
-                style={chipStyle(energy === pick.id)}
+                onClick={() => setOpenRecipe(open ? null : recipe.id)}
+                aria-expanded={open}
+                className="w-full text-left px-4 py-3.5 flex items-center justify-between gap-3"
+                style={{ minHeight: 56 }}
               >
-                {pick.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Recipe accordion */}
-        <div className="flex flex-col gap-3">
-          {RECIPES.map((recipe) => {
-            const open = openRecipe === recipe.id;
-            const highlighted = highlightedRecipes.has(recipe.id);
-            return (
-              <div
-                key={recipe.id}
-                className="rounded-xl overflow-hidden"
-                style={{
-                  backgroundColor: t.cardBg,
-                  border: highlighted ? `2px solid ${t.border}` : `1px solid ${t.lightLine}`,
-                  transition: 'border-color 0.15s',
-                }}
-              >
-                <button
-                  onClick={() => setOpenRecipe(open ? null : recipe.id)}
-                  aria-expanded={open}
-                  className="w-full text-left px-4 py-3.5 flex items-center justify-between gap-3"
-                  style={{ minHeight: 56 }}
+                <div className="min-w-0">
+                  <span className="text-sm font-semibold" style={{ color: t.text }}>{recipe.name}</span>
+                  <span className="text-xs ml-2" style={{ color: t.muted }}>{recipe.subtitle}</span>
+                </div>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={t.muted}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="shrink-0"
+                  style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
                 >
-                  <div className="min-w-0">
-                    <span className="text-sm font-semibold" style={{ color: t.text }}>{recipe.name}</span>
-                    <span className="text-xs ml-2" style={{ color: t.muted }}>{recipe.subtitle}</span>
-                  </div>
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke={t.muted}
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="shrink-0"
-                    style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
 
-                {open && (
-                  <div className="px-4 pb-4">
-                    <div className="flex flex-col">
-                      {recipe.skills.map((skill, idx) => {
-                        const done = doneToday.has(skill);
-                        return (
-                          <div
-                            key={skill}
-                            className="flex items-center justify-between gap-3 py-2.5"
-                            style={{ borderTop: idx > 0 ? `1px solid ${t.hover}` : 'none' }}
-                          >
-                            <span className="text-sm" style={{ color: t.text }}>{skill}</span>
-                            <button
-                              onClick={() => togglePracticed(skill)}
-                              aria-pressed={done}
-                              className="shrink-0 flex items-center justify-center gap-1.5 rounded-lg text-xs font-medium"
-                              style={{
-                                minHeight: 44,
-                                minWidth: 92,
-                                padding: '0 14px',
-                                backgroundColor: done ? t.btnBg : t.hover,
-                                color: done ? t.btnFg : t.text,
-                                border: done ? 'none' : `1px solid ${t.lightLine}`,
-                                transition: 'all 0.15s',
-                              }}
-                            >
-                              {done && (
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              )}
-                              {done ? 'Done' : 'Mark done'}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs mt-3" style={{ color: t.muted }}>{recipe.howItHelps}</p>
+              {open && (
+                <div className="px-4 pb-4">
+                  <div className="flex flex-col">
+                    {recipe.skills.map((skill, idx) => (
+                      <SkillRow
+                        key={skill}
+                        skill={skill}
+                        first={idx === 0}
+                        dividerColor={t.hover}
+                        done={doneToday.has(skill)}
+                        onToggle={() => toggle(skill)}
+                      />
+                    ))}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+                  <p className="text-xs mt-3" style={{ color: t.muted }}>{recipe.howItHelps}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
-}
-
-function localToday(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
 }

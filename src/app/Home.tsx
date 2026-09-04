@@ -15,14 +15,15 @@ import { fetchEntries, fetchStats, signOut } from '@/lib/supabase-service';
 import AuthScreen from '@/components/journal/AuthScreen';
 import Sidebar from '@/components/journal/Sidebar';
 import DailyEntry from '@/components/journal/DailyEntry';
-import Regulate from '@/components/journal/Regulate';
+import { CheckIn, Toolbox } from '@/components/journal/Regulate';
 import GlimmerBank from '@/components/journal/GlimmerBank';
 import WeeklyReflection from '@/components/journal/WeeklyReflection';
 import StatsView from '@/components/journal/StatsView';
 
 const TABS = [
   { id: 'daily', label: 'Daily Entry' },
-  { id: 'regulate', label: 'Regulate' },
+  { id: 'checkin', label: 'Check-in' },
+  { id: 'toolbox', label: 'Toolbox' },
   { id: 'bank', label: 'Glimmer Bank' },
   { id: 'weekly', label: 'Weekly' },
   { id: 'stats', label: 'Stats' },
@@ -308,7 +309,8 @@ export default function Home() {
           {/* Tab content */}
           <div className="flex-1 px-4 py-4 lg:px-6">
             {activeTab === 'daily' && <DailyEntry />}
-            {activeTab === 'regulate' && <Regulate />}
+            {activeTab === 'checkin' && <CheckIn />}
+            {activeTab === 'toolbox' && <Toolbox />}
             {activeTab === 'bank' && <GlimmerBank />}
             {activeTab === 'weekly' && <WeeklyReflection />}
             {activeTab === 'stats' && <StatsView />}
