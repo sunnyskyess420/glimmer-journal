@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { THEMES, PRACTICE_MILESTONES, type ThemeColors } from '@/lib/constants';
 import {
   NS_ZONES,
@@ -9,8 +9,6 @@ import {
   CHECKIN_INTRO,
   RECOVERY_RULE,
   PRACTICE_TOASTS,
-  STRIP_EMPTY,
-  STRIP_STARTED,
   ONE_SMALL_THING_INTRO,
   ONE_SMALL_THING_DONE,
   loadPracticeLog,
@@ -20,7 +18,6 @@ import {
   loadZoneCheckIns,
   logZoneCheckIn,
   updateLastZoneCheckInNote,
-  getWeeklyCheckInSummary,
   loadShownPracticeMilestones,
   markPracticeMilestoneShown,
   getPracticeStreakDays,
@@ -31,7 +28,6 @@ import {
 } from '@/lib/regulate-content';
 import { useJournalStore } from '@/store/journal-store';
 import BreathingButton from './BreathingButton';
-import CheckInSummary from './CheckInSummary';
 
 // Shared practice log. Both pages (Check-in and Toolbox) read and write the
 // same localStorage log, so a skill marked done on one page shows up in the
@@ -208,7 +204,7 @@ export function CheckIn() {
   const { theme } = useJournalStore();
   const setActiveTab = useJournalStore((s) => s.setActiveTab);
   const t: ThemeColors = THEMES[theme];
-  const { doneToday, todayCount, weekCount, toggle } = usePracticeLog();
+  const { doneToday, toggle } = usePracticeLog();
 
   const [zone, setZone] = useState<ZoneId | null>(null);
 
@@ -217,22 +213,32 @@ export function CheckIn() {
   // the input starts blank for the new entry.
   const [zoneNote, setZoneNote] = useState('');
 
+  // Visible "✓ Saved" indicator so the user knows their note actually
+  // went somewhere. Without this, the auto-save is invisible and the
+  // input feels like a dead end. Shows for ~1.5s after the user stops
+  // typing; if they keep typing, the timer resets so it stays visible.
+  const [noteSavedVisible, setNoteSavedVisible] = useState(false);
+  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showSavedIndicator = () => {
+    setNoteSavedVisible(true);
+    if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
+    savedTimeoutRef.current = setTimeout(() => setNoteSavedVisible(false), 1500);
+  };
+  useEffect(() => {
+    return () => {
+      if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
+    };
+  }, []);
+
   // Zone check-in log — every tap on a zone quietly counts toward the
   // gentle weekly summary ("You checked in 5 times this week, mostly in
   // your window"). We keep a local copy in state so the summary updates
   // immediately when the user taps.
   const [zoneLog, setZoneLog] = useState<ZoneCheckInLog>({});
-  const [zoneLogReady, setZoneLogReady] = useState(false);
 
   useEffect(() => {
     setZoneLog(loadZoneCheckIns());
-    setZoneLogReady(true);
   }, []);
-
-  const weeklySummary = useMemo(
-    () => (zoneLogReady ? getWeeklyCheckInSummary(zoneLog) : null),
-    [zoneLog, zoneLogReady]
-  );
 
   const handleZoneTap = (z: { id: ZoneId }, currentlySelected: boolean) => {
     if (!currentlySelected) {
@@ -247,10 +253,13 @@ export function CheckIn() {
 
   // Called as the user types in the note input. Updates the just-logged
   // entry's note in real time so the weekly view reflects it immediately.
+  // Also flashes a "✓ Saved" indicator so the user can see the note went
+  // somewhere — without it, the auto-save is invisible.
   const handleZoneNoteChange = (value: string) => {
     setZoneNote(value);
     const updated = updateLastZoneCheckInNote(value, zoneLog);
     setZoneLog(updated);
+    showSavedIndicator();
   };
 
   // Concrete, loggable actions shown in the detail panel for the selected zone.
@@ -330,30 +339,6 @@ export function CheckIn() {
         <BreathingButton />
       </section>
 
-      {/* Gentle weekly check-in summary — "You checked in 5 times this
-          week, mostly in your window." Quiet, factual, therapist-look-atable.
-          Shown on both this tab (rolling 7-day window) AND the Weekly tab
-          (selected Monday-anchored week). */}
-      {weeklySummary && weeklySummary.total > 0 && (
-        <CheckInSummary summary={weeklySummary} periodNoun="this week" />
-      )}
-
-      {/* Practice strip */}
-      <section
-        className="rounded-xl p-4"
-        style={{ backgroundColor: t.cardBg, border: `1px solid ${t.lightLine}` }}
-      >
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-sm font-semibold" style={{ color: t.text }}>Doing the work</h2>
-          <span className="text-xs" style={{ color: t.muted }}>
-            {todayCount} today · {weekCount} this week
-          </span>
-        </div>
-        <p className="text-xs mt-1.5" style={{ color: t.muted }}>
-          {todayCount === 0 ? STRIP_EMPTY : STRIP_STARTED}
-        </p>
-      </section>
-
       {/* Window of Tolerance check-in */}
       <section className="flex flex-col gap-4">
         <div>
@@ -414,12 +399,29 @@ export function CheckIn() {
                     window" into "5 check-ins: Tuesday at work (hyper), Wednesday
                     morning (hypo)…" — the richer, therapist-reviewable view. */}
                 <div>
-                  <label
-                    className="block text-xs font-medium mb-1.5"
-                    style={{ color: t.muted }}
-                  >
-                    What was happening? <span style={{ opacity: 0.6 }}>(optional)</span>
-                  </label>
+                  <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                    <label
+                      className="block text-xs font-medium"
+                      style={{ color: t.muted }}
+                    >
+                      What was happening? <span style={{ opacity: 0.6 }}>(optional)</span>
+                    </label>
+                    {/* Visible "✓ Saved" indicator — fades in after each
+                        keystroke, fades out ~1.5s after the user stops
+                        typing. Replaces the dead-end feeling of an
+                        auto-saving input with no visible confirmation. */}
+                    <span
+                      className="text-[10px] font-medium"
+                      style={{
+                        color: t.muted,
+                        opacity: noteSavedVisible ? 1 : 0,
+                        transition: 'opacity 0.2s',
+                      }}
+                      aria-live="polite"
+                    >
+                      ✓ Saved
+                    </span>
+                  </div>
                   <input
                     type="text"
                     value={zoneNote}
@@ -437,6 +439,9 @@ export function CheckIn() {
                     onFocus={(e) => (e.currentTarget.style.borderColor = t.border)}
                     onBlur={(e) => (e.currentTarget.style.borderColor = t.lightLine)}
                   />
+                  <p className="text-[10px] mt-1" style={{ color: t.muted, opacity: 0.7 }}>
+                    Saves automatically. Shows up in your weekly summary.
+                  </p>
                 </div>
 
                 {/* Breathing button — show only when the user is outside
