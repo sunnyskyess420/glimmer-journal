@@ -9,8 +9,8 @@ interface InstallHelpDialogProps {
 }
 
 export default function InstallHelpDialog({ open, onClose }: InstallHelpDialogProps) {
-  const { theme } = useJournalStore();
-  const t: ThemeColors = THEMES[theme];
+  const { theme, themeMode } = useJournalStore();
+  const t: ThemeColors = THEMES[theme][themeMode];
 
   if (!open) return null;
 

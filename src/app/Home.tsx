@@ -7,6 +7,7 @@ import {
   FIRST_TIME_MESSAGES,
   RETURN_MESSAGES,
   type ThemeName,
+  type ThemeMode,
   type ThemeColors,
 } from '@/lib/constants';
 import { useJournalStore } from '@/store/journal-store';
@@ -38,6 +39,8 @@ export default function Home() {
     setUser,
     theme,
     setTheme,
+    themeMode,
+    setThemeMode,
     activeTab,
     setActiveTab,
     sidebarOpen,
@@ -49,7 +52,10 @@ export default function Home() {
     showMilestone,
   } = store;
 
-  const t: ThemeColors = THEMES[theme];
+  // Resolve the active color set: theme family + mode. This is what every
+  // child component consumes as `t: ThemeColors`. Stays in sync with the
+  // store's `theme` and `themeMode` automatically.
+  const t: ThemeColors = THEMES[theme][themeMode];
   const [initializing, setInitializing] = useState(true);
   const [footerIdx, setFooterIdx] = useState(0);
 
@@ -71,6 +77,42 @@ export default function Home() {
     }, 8000);
     return () => clearInterval(interval);
   }, []); // Footer rotation - forces new build
+
+  // Detect system color preference on first load. If the user has OS-level
+  // dark mode enabled (`prefers-color-scheme: dark`) AND they haven't
+  // explicitly chosen a mode yet (i.e., no saved preference in Supabase),
+  // default the app to dark mode. This runs once before the auth check
+  // resolves so first-time users see the right mode immediately.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    // Only apply the system preference if the user hasn't explicitly
+    // chosen a mode (signaled by the store still holding the default
+    // 'light'). The Supabase session check below will overwrite this
+    // if a saved preference exists, so we don't fight the user's choice.
+    if (mq.matches && useJournalStore.getState().themeMode === 'light') {
+      // Set the mode only if no saved preference will come back from
+      // Supabase. We use a sessionStorage flag so the system-default
+      // application only happens on the very first load of a session.
+      const alreadyApplied = sessionStorage.getItem('glimmer.systemThemeApplied');
+      if (!alreadyApplied) {
+        sessionStorage.setItem('glimmer.systemThemeApplied', '1');
+        setThemeMode('dark');
+      }
+    }
+    // Listen for live changes to the OS preference. If the user switches
+    // their OS between light/dark while the app is open, follow along —
+    // but only if they haven't explicitly chosen a mode in-app (we track
+    // that via a localStorage flag set by the Sidebar's toggle).
+    const handler = (e: MediaQueryListEvent) => {
+      const userChoseExplicitly = localStorage.getItem('glimmer.themeMode.chosen');
+      if (userChoseExplicitly) return;
+      setThemeMode(e.matches ? 'dark' : 'light');
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [setThemeMode]);
 
   // Register service worker for PWA install support.
   // Chrome/Brave require a registered SW with a fetch handler before they'll
@@ -128,8 +170,25 @@ export default function Home() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const u = session.user;
-        setUser({ id: u.id, email: u.email!, name: u.user_metadata?.name || null, theme: u.user_metadata?.theme || 'Mono' });
-        if (u.user_metadata?.theme && THEMES[u.user_metadata.theme as ThemeName]) setTheme(u.user_metadata.theme as ThemeName);
+        const savedTheme = (u.user_metadata?.theme as string) || 'Mono';
+        const savedMode = (u.user_metadata?.themeMode as string) || null;
+        setUser({
+          id: u.id,
+          email: u.email!,
+          name: u.user_metadata?.name || null,
+          theme: savedTheme,
+          themeMode: savedMode || undefined,
+        });
+        if (THEMES[savedTheme as ThemeName]) setTheme(savedTheme as ThemeName);
+        // If the user has a saved mode, restore it (overriding the system
+        // default applied earlier). Otherwise leave the system-detected
+        // mode in place.
+        if (savedMode === 'light' || savedMode === 'dark') {
+          setThemeMode(savedMode);
+          // Mark that the user has a stored preference so we don't fight
+          // it later if the OS mode changes.
+          localStorage.setItem('glimmer.themeMode.chosen', '1');
+        }
         Promise.all([loadEntries(), loadStats()]).finally(() => setInitializing(false));
       } else {
         setInitializing(false);
@@ -140,13 +199,29 @@ export default function Home() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         const u = session.user;
-        setUser({ id: u.id, email: u.email!, name: u.user_metadata?.name || null, theme: u.user_metadata?.theme || 'Mono' });
+        const savedTheme = (u.user_metadata?.theme as string) || 'Mono';
+        const savedMode = (u.user_metadata?.themeMode as string) || null;
+        setUser({
+          id: u.id,
+          email: u.email!,
+          name: u.user_metadata?.name || null,
+          theme: savedTheme,
+          themeMode: savedMode || undefined,
+        });
+        if (THEMES[savedTheme as ThemeName]) setTheme(savedTheme as ThemeName);
+        if (savedMode === 'light' || savedMode === 'dark') {
+          setThemeMode(savedMode);
+          localStorage.setItem('glimmer.themeMode.chosen', '1');
+        }
         loadEntries();
         loadStats();
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         useJournalStore.getState().setEntries([], 0);
         useJournalStore.getState().setStats(null);
+        // Reset to light mode on sign-out — no user preference applies.
+        setThemeMode('light');
+        localStorage.removeItem('glimmer.themeMode.chosen');
       }
     });
 
@@ -193,7 +268,7 @@ export default function Home() {
 
   // Auth screen
   if (!user) {
-    return <AuthScreen onAuth={handleAuth} theme={theme} />;
+    return <AuthScreen onAuth={handleAuth} theme={theme} themeMode={themeMode} />;
   }
 
   // Main app

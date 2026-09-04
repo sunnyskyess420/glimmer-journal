@@ -36,8 +36,8 @@ function formatDateRange(weekStart: string): string {
 }
 
 export default function WeeklyReflection() {
-  const { theme, showToast, entries } = useJournalStore();
-  const t: ThemeColors = THEMES[theme];
+  const { theme, themeMode, showToast, entries } = useJournalStore();
+  const t: ThemeColors = THEMES[theme][themeMode];
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [responses, setResponses] = useState(['', '', '']);

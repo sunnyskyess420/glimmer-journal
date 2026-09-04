@@ -147,7 +147,7 @@ function DoneButton({
   onToggle: () => void;
   cardBg: string;
 }) {
-  const t: ThemeColors = THEMES[useJournalStore((s) => s.theme)];
+  const t: ThemeColors = THEMES[useJournalStore((s) => s.theme)][useJournalStore((s) => s.themeMode)];
   return (
     <button
       onClick={onToggle}
@@ -186,7 +186,7 @@ function SkillRow({
   done: boolean;
   onToggle: () => void;
 }) {
-  const t: ThemeColors = THEMES[useJournalStore((s) => s.theme)];
+  const t: ThemeColors = THEMES[useJournalStore((s) => s.theme)][useJournalStore((s) => s.themeMode)];
   return (
     <div
       className="flex items-center justify-between gap-3 py-2.5"
@@ -201,9 +201,9 @@ function SkillRow({
 // --- Page 1: Check-in --------------------------------------------------------
 
 export function CheckIn() {
-  const { theme } = useJournalStore();
+  const { theme, themeMode } = useJournalStore();
   const setActiveTab = useJournalStore((s) => s.setActiveTab);
-  const t: ThemeColors = THEMES[theme];
+  const t: ThemeColors = THEMES[theme][themeMode];
   const { doneToday, toggle } = usePracticeLog();
 
   const [zone, setZone] = useState<ZoneId | null>(null);
@@ -573,8 +573,8 @@ export function CheckIn() {
 // --- Page 2: Toolbox ---------------------------------------------------------
 
 export function Toolbox() {
-  const { theme } = useJournalStore();
-  const t: ThemeColors = THEMES[theme];
+  const { theme, themeMode } = useJournalStore();
+  const t: ThemeColors = THEMES[theme][themeMode];
   const { doneToday, todayCount, toggle } = usePracticeLog();
 
   const [openRecipe, setOpenRecipe] = useState<string | null>(null);

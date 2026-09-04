@@ -30,8 +30,17 @@ export async function getUserTheme(): Promise<string> {
   return (user?.user_metadata?.theme as string) || 'Mono';
 }
 
-export async function updateUserTheme(theme: string) {
-  await supabase.auth.updateUser({ data: { theme } });
+/**
+ * Persist the user's theme family (e.g. 'Mono', 'Sage') AND their light/dark
+ * mode preference to Supabase user_metadata. Both are stored together so a
+ * single call updates both; either can be omitted to leave it unchanged.
+ */
+export async function updateUserTheme(theme: string, themeMode?: string) {
+  const data: Record<string, unknown> = { theme };
+  if (themeMode === 'light' || themeMode === 'dark') {
+    data.themeMode = themeMode;
+  }
+  await supabase.auth.updateUser({ data });
 }
 
 // ---- Entries ----

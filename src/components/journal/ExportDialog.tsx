@@ -18,8 +18,8 @@ interface ExportDialogProps {
 type RangePreset = 'all' | '7' | '30' | '90' | 'ytd' | 'custom';
 
 export default function ExportDialog({ open, onClose }: ExportDialogProps) {
-  const { theme, entries, stats, user, showToast } = useJournalStore();
-  const t: ThemeColors = THEMES[theme];
+  const { theme, themeMode, entries, stats, user, showToast } = useJournalStore();
+  const t: ThemeColors = THEMES[theme][themeMode];
 
   const [rangePreset, setRangePreset] = useState<RangePreset>('all');
   const [customStart, setCustomStart] = useState<string>('');

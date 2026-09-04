@@ -23,6 +23,7 @@ import { createEntry, updateEntry as updateEntrySvc, deleteEntry as deleteEntryS
 export default function DailyEntry() {
   const {
     theme,
+    themeMode,
     entries,
     selectedDate,
     addEntry,
@@ -31,7 +32,7 @@ export default function DailyEntry() {
     showMilestone,
     totalEntries,
   } = useJournalStore();
-  const t: ThemeColors = THEMES[theme];
+  const t: ThemeColors = THEMES[theme][themeMode];
 
   const [selectedPrompt, setSelectedPrompt] = useState<number | null>(null);
   const [editingEntry, setEditingEntry] = useState<GlimmerEntry | null>(null);

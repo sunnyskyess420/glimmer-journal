@@ -4,8 +4,8 @@ import { THEMES, NS_STATES, type ThemeColors } from '@/lib/constants';
 import { useJournalStore } from '@/store/journal-store';
 
 export default function StatsView() {
-  const { theme, stats } = useJournalStore();
-  const t: ThemeColors = THEMES[theme];
+  const { theme, themeMode, stats } = useJournalStore();
+  const t: ThemeColors = THEMES[theme][themeMode];
 
   if (!stats || stats.total === 0) {
     return (

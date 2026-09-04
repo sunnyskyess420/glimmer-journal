@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { THEMES, type ThemeName, FOOTER_MESSAGES } from '@/lib/constants';
+import { THEMES, type ThemeName, type ThemeMode, FOOTER_MESSAGES } from '@/lib/constants';
 import { signUp, signIn } from '@/lib/supabase-service';
 import { supabase } from '@/lib/supabase';
 
 interface AuthScreenProps {
   onAuth: (user: { id: string; email: string; name: string | null; theme: string }) => void;
   theme: ThemeName;
+  themeMode: ThemeMode;
 }
 
-export default function AuthScreen({ onAuth, theme }: AuthScreenProps) {
-  const t = THEMES[theme];
+export default function AuthScreen({ onAuth, theme, themeMode }: AuthScreenProps) {
+  const t = THEMES[theme][themeMode];
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

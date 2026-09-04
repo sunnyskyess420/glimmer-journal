@@ -33,7 +33,8 @@ export default function CheckInSummary({
   showDays = false,
 }: CheckInSummaryProps) {
   const theme = useJournalStore((s) => s.theme);
-  const t: ThemeColors = THEMES[theme];
+  const themeMode = useJournalStore((s) => s.themeMode);
+  const t: ThemeColors = THEMES[theme][themeMode];
 
   if (summary.total === 0) return null;
 

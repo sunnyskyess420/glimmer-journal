@@ -6,8 +6,8 @@ import { useJournalStore } from '@/store/journal-store';
 import { updateEntry as updateEntrySvc } from '@/lib/supabase-service';
 
 export default function GlimmerBank() {
-  const { theme, entries } = useJournalStore();
-  const t: ThemeColors = THEMES[theme];
+  const { theme, themeMode, entries } = useJournalStore();
+  const t: ThemeColors = THEMES[theme][themeMode];
 
   const starred = useMemo(() => entries.filter((e) => e.starred), [entries]);
 

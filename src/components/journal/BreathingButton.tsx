@@ -206,7 +206,8 @@ function useBreathingCycle(open: boolean, mode: Mode, running: boolean) {
 
 function BreathingModal({ onClose }: { onClose: () => void }) {
   const theme = useJournalStore((s) => s.theme);
-  const t: ThemeColors = THEMES[theme];
+  const themeMode = useJournalStore((s) => s.themeMode);
+  const t: ThemeColors = THEMES[theme][themeMode];
   // On mount, load the user's last-used pattern (or the default).
   const [mode, setMode] = useState<Mode>(() => loadLastPattern());
   const [running, setRunning] = useState(true);
@@ -389,7 +390,8 @@ export default function BreathingButton({
   style,
 }: BreathingButtonProps) {
   const theme = useJournalStore((s) => s.theme);
-  const t: ThemeColors = THEMES[theme];
+  const themeMode = useJournalStore((s) => s.themeMode);
+  const t: ThemeColors = THEMES[theme][themeMode];
   const [open, setOpen] = useState(false);
 
   const triggerStyle: React.CSSProperties = useMemo(() => {

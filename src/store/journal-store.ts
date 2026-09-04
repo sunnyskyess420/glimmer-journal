@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ThemeName } from '@/lib/constants';
+import type { ThemeName, ThemeMode } from '@/lib/constants';
 import { localDateISO } from '@/lib/utils';
 
 export interface User {
@@ -7,6 +7,8 @@ export interface User {
   email: string;
   name: string | null;
   theme: string;
+  /** Optional theme mode persisted in Supabase user_metadata. */
+  themeMode?: string;
 }
 
 export interface GlimmerEntry {
@@ -52,6 +54,11 @@ interface JournalStore {
   setStats: (stats: Stats | null) => void;
   theme: ThemeName;
   setTheme: (theme: ThemeName) => void;
+  /** Light/Dark mode. Defaults to 'light' but the app checks the system
+      preference on first load (Home.tsx) and switches if needed. The user
+      can override at any time via the Sidebar's sun/moon toggle. */
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   sidebarOpen: boolean;
@@ -88,6 +95,11 @@ export const useJournalStore = create<JournalStore>((set) => ({
   setStats: (stats) => set({ stats }),
   theme: 'Mono',
   setTheme: (theme) => set({ theme }),
+  // Default to 'light'. Home.tsx overrides this on first load with the
+  // user's system preference (prefers-color-scheme: dark) before any UI
+  // renders, so users whose OS is in dark mode see dark on first visit.
+  themeMode: 'light',
+  setThemeMode: (themeMode) => set({ themeMode }),
   // Default to Check-in instead of Daily Entry. The whole point of the app
   // is "where are you right now" — that question should be the first thing
   // the user sees when they open it. Journaling (Daily Entry) comes after.

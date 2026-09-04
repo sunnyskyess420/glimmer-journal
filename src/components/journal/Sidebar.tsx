@@ -39,6 +39,8 @@ export default function Sidebar({ onLogout }: SidebarProps) {
     user,
     theme,
     setTheme,
+    themeMode,
+    setThemeMode,
     stats,
     entries,
     selectedDate,
@@ -47,7 +49,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
     setSidebarOpen,
   } = useJournalStore();
 
-  const t: ThemeColors = THEMES[theme];
+  const t: ThemeColors = THEMES[theme][themeMode];
   const streak = stats?.streak ?? 0;
   const [exportOpen, setExportOpen] = useState(false);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
@@ -147,8 +149,23 @@ export default function Sidebar({ onLogout }: SidebarProps) {
 
   const handleThemeChange = async (themeName: ThemeName) => {
     setTheme(themeName);
+    // Persist the new theme family AND the current mode so switching family
+    // doesn't accidentally drop the user's light/dark preference.
     try {
-      await updateUserTheme(themeName);
+      await updateUserTheme(themeName, themeMode);
+    } catch {
+      // best-effort
+    }
+  };
+
+  // Sun/moon toggle. Sets the mode in the store, marks it as an explicit
+  // user choice (so the system-preference watcher stops fighting it),
+  // and persists it to Supabase so it survives across devices.
+  const handleThemeModeChange = async (mode: 'light' | 'dark') => {
+    setThemeMode(mode);
+    localStorage.setItem('glimmer.themeMode.chosen', '1');
+    try {
+      await updateUserTheme(theme, mode);
     } catch {
       // best-effort
     }
@@ -203,11 +220,63 @@ export default function Sidebar({ onLogout }: SidebarProps) {
 
         {/* Theme picker */}
         <div className="mb-3">
-          <p className="text-xs font-medium mb-2" style={{ color: t.muted }}>Theme</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium" style={{ color: t.muted }}>Theme</p>
+            {/* Sun/moon mode toggle — flips the current theme family between
+                its light and dark variants. Always visible (every theme
+                family has both variants now). Marks the choice as explicit
+                so the system-preference watcher stops fighting it. */}
+            <div
+              className="flex items-center gap-1 rounded-full p-0.5"
+              style={{ backgroundColor: t.hover, border: `1px solid ${t.lightLine}` }}
+            >
+              <button
+                onClick={() => handleThemeModeChange('light')}
+                aria-pressed={themeMode === 'light'}
+                aria-label="Light mode"
+                title="Light mode"
+                className="flex items-center justify-center rounded-full transition-colors"
+                style={{
+                  width: 22,
+                  height: 22,
+                  backgroundColor: themeMode === 'light' ? t.btnBg : 'transparent',
+                  color: themeMode === 'light' ? t.btnFg : t.muted,
+                  border: 'none',
+                }}
+              >
+                {/* Sun icon */}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+                </svg>
+              </button>
+              <button
+                onClick={() => handleThemeModeChange('dark')}
+                aria-pressed={themeMode === 'dark'}
+                aria-label="Dark mode"
+                title="Dark mode"
+                className="flex items-center justify-center rounded-full transition-colors"
+                style={{
+                  width: 22,
+                  height: 22,
+                  backgroundColor: themeMode === 'dark' ? t.btnBg : 'transparent',
+                  color: themeMode === 'dark' ? t.btnFg : t.muted,
+                  border: 'none',
+                }}
+              >
+                {/* Moon icon */}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                </svg>
+              </button>
+            </div>
+          </div>
           <div className="flex gap-2">
             {THEME_ORDER.map((themeName) => {
               const isActive = theme === themeName;
-              const themeColor = THEMES[themeName].btnBg;
+              // Show the dot in the user's currently-selected mode so the
+              // dot looks the same as the theme will look applied.
+              const themeColor = THEMES[themeName][themeMode].btnBg;
               return (
                 <button
                   key={themeName}
