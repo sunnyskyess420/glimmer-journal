@@ -256,8 +256,20 @@ export async function fetchStats(): Promise<Stats> {
     });
   }
 
+  // Streak with one grace day.
+  // A streak is consecutive days (today-or-yesterday backwards) with at
+  // least one entry. Missing a single day doesn't break the streak — we
+  // allow exactly one "grace day" per active streak. So if you journaled
+  // Mon-Fri, skipped Sat, and journaled Sun, that's a 6-day streak (not a
+  // broken 5-day streak restarting at 1). The grace day is reset once the
+  // streak ends — i.e., once you miss TWO consecutive days, the streak is
+  // done and any new streak starts fresh.
+  //
+  // This matches how mental-health practice actually works: missing a day
+  // because life happened shouldn't erase the work that came before it.
   const entryDates = [...new Set(entries.map((e: Record<string, unknown>) => e.date as string))].sort().reverse();
   let streak = 0;
+  let graceUsed = false;
   const checkDate = new Date(today);
   for (let i = 0; i < 365; i++) {
     const ds = localDateISO(checkDate);
@@ -265,6 +277,8 @@ export async function fetchStats(): Promise<Stats> {
       streak++;
       checkDate.setDate(checkDate.getDate() - 1);
     } else if (i === 0) {
+      // Today is empty — that's fine, "today is in progress". Check
+      // yesterday without consuming a grace day.
       checkDate.setDate(checkDate.getDate() - 1);
       const yds = localDateISO(checkDate);
       if (entryDates.includes(yds)) {
@@ -272,8 +286,22 @@ export async function fetchStats(): Promise<Stats> {
         checkDate.setDate(checkDate.getDate() - 1);
         continue;
       }
+      // Yesterday is also empty. Try the day before as the grace day — if
+      // the streak is still alive, it can survive one missed day.
+      if (!graceUsed) {
+        graceUsed = true;
+        checkDate.setDate(checkDate.getDate() - 1);
+        continue;
+      }
       break;
     } else {
+      // We hit a missing day mid-streak. Use the grace day if we haven't
+      // already, otherwise the streak is over.
+      if (!graceUsed) {
+        graceUsed = true;
+        checkDate.setDate(checkDate.getDate() - 1);
+        continue;
+      }
       break;
     }
   }

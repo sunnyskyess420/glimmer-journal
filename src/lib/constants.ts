@@ -79,6 +79,22 @@ export const MILESTONES: Record<number, string> = {
   100: "100 glimmers! You are a safety-detecting powerhouse.",
 };
 
+// Practice milestones — celebrate the *doing*, not just the journaling.
+// Keys are stable ids used in localStorage to ensure each one only fires
+// the friendly popup once (the first time the user hits that threshold).
+export const PRACTICE_MILESTONES: Record<string, string> = {
+  firstPractice:
+    "Your first rep. This is how the window widens — one small, real practice at a time.",
+  firstThreeInDay:
+    "Three tools in one day. That's the work — small, repeated, real.",
+  fiveDayStreak:
+    "Five days in a row of practice. Your window is widening.",
+  tenDayStreak:
+    "Ten days of practice. You're building something your nervous system can lean on.",
+  twentyFiveSkills:
+    "25 skills logged. The reps are adding up.",
+};
+
 export const FIRST_TIME_MESSAGES = [
   "Welcome to Glimmer Journal. Start by noticing one small thing that felt safe today.",
   "This is your first time here. There’s no right way to do this -- just notice.",

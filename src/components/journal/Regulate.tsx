@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { THEMES, type ThemeColors } from '@/lib/constants';
+import { THEMES, PRACTICE_MILESTONES, type ThemeColors } from '@/lib/constants';
 import {
   NS_ZONES,
   RECIPES,
@@ -11,19 +11,34 @@ import {
   PRACTICE_TOASTS,
   STRIP_EMPTY,
   STRIP_STARTED,
+  ONE_SMALL_THING_INTRO,
+  ONE_SMALL_THING_DONE,
   loadPracticeLog,
   savePracticeLog,
   recentDates,
+  pickDailyOneSmallThing,
+  loadZoneCheckIns,
+  logZoneCheckIn,
+  updateLastZoneCheckInNote,
+  getWeeklyCheckInSummary,
+  loadShownPracticeMilestones,
+  markPracticeMilestoneShown,
+  getPracticeStreakDays,
+  getTotalPracticeCount,
   type ZoneId,
+  type PracticeLog,
+  type ZoneCheckInLog,
 } from '@/lib/regulate-content';
 import { useJournalStore } from '@/store/journal-store';
+import BreathingButton from './BreathingButton';
+import CheckInSummary from './CheckInSummary';
 
 // Shared practice log. Both pages (Check-in and Toolbox) read and write the
 // same localStorage log, so a skill marked done on one page shows up in the
 // other page's counts the next time you open it.
 function usePracticeLog() {
-  const { showToast } = useJournalStore();
-  const [log, setLog] = useState<Record<string, string[]>>({});
+  const { showToast, showMilestone } = useJournalStore();
+  const [log, setLog] = useState<PracticeLog>({});
   const [logReady, setLogReady] = useState(false);
 
   useEffect(() => {
@@ -45,19 +60,76 @@ function usePracticeLog() {
     const today = localToday();
     const updated = { ...log };
     const list = [...(updated[today] ?? [])];
-    if (list.includes(skill)) {
-      updated[today] = list.filter((s) => s !== skill);
-    } else {
+    const isAdding = !list.includes(skill);
+    if (isAdding) {
       list.push(skill);
       updated[today] = list;
       const msg = PRACTICE_TOASTS[Math.floor(Math.random() * PRACTICE_TOASTS.length)];
       showToast(msg);
+      // Fire practice milestones for the *doing*, not just the journaling.
+      // We check after the addition so today's count and the streak include
+      // this latest rep.
+      checkPracticeMilestones(updated, showMilestone);
+    } else {
+      updated[today] = list.filter((s) => s !== skill);
     }
     setLog(updated);
     savePracticeLog(updated);
   };
 
   return { doneToday, todayCount, weekCount, toggle };
+}
+
+// Celebrate practice milestones the first time the user hits each threshold.
+// "First time ever" is tracked in localStorage so each milestone only fires
+// its popup once across all sessions and devices-on-this-browser.
+function checkPracticeMilestones(
+  log: PracticeLog,
+  showMilestone: (msg: string) => void
+) {
+  const shown = loadShownPracticeMilestones();
+  const today = localToday();
+  const todayCount = log[today]?.length ?? 0;
+
+  // Order matters — show one at a time, highest-threshold first so a user
+  // who's been practicing quietly for a while sees the most significant
+  // celebration first, then the smaller ones later.
+  const streak = getPracticeStreakDays(log);
+  const total = getTotalPracticeCount(log);
+
+  type Candidate = { key: string; message: string };
+  const candidates: Candidate[] = [];
+
+  if (total >= 25 && !shown['twentyFiveSkills']) {
+    candidates.push({ key: 'twentyFiveSkills', message: PRACTICE_MILESTONES.twentyFiveSkills });
+  }
+  if (streak >= 10 && !shown['tenDayStreak']) {
+    candidates.push({ key: 'tenDayStreak', message: PRACTICE_MILESTONES.tenDayStreak });
+  }
+  if (streak >= 5 && !shown['fiveDayStreak']) {
+    candidates.push({ key: 'fiveDayStreak', message: PRACTICE_MILESTONES.fiveDayStreak });
+  }
+  if (todayCount >= 3 && !shown['firstThreeInDay']) {
+    candidates.push({ key: 'firstThreeInDay', message: PRACTICE_MILESTONES.firstThreeInDay });
+  }
+  // The very first practice rep deserves the same welcome the first journal
+  // entry already gets. `firstPractice` fires when cumulative total hits 1
+  // (i.e., the user just logged their first ever skill). It's checked last
+  // because it's the smallest threshold, but for a brand-new user it's the
+  // only one that will fire — and we want it to fire on its own without
+  // competing with higher-threshold ones (which can't trigger on the first
+  // rep anyway, since todayCount would also be 1, not 3).
+  if (total === 1 && !shown['firstPractice']) {
+    candidates.push({ key: 'firstPractice', message: PRACTICE_MILESTONES.firstPractice });
+  }
+
+  if (candidates.length > 0) {
+    // Pop the highest-priority candidate only — let the user enjoy the moment
+    // before we pile on more celebrations.
+    const next = candidates[0];
+    markPracticeMilestoneShown(next.key);
+    showMilestone(next.message);
+  }
 }
 
 function localToday(): string {
@@ -140,6 +212,47 @@ export function CheckIn() {
 
   const [zone, setZone] = useState<ZoneId | null>(null);
 
+  // Optional one-line "what was happening" note attached to the most
+  // recent zone check-in. Reset every time the user taps a new zone so
+  // the input starts blank for the new entry.
+  const [zoneNote, setZoneNote] = useState('');
+
+  // Zone check-in log — every tap on a zone quietly counts toward the
+  // gentle weekly summary ("You checked in 5 times this week, mostly in
+  // your window"). We keep a local copy in state so the summary updates
+  // immediately when the user taps.
+  const [zoneLog, setZoneLog] = useState<ZoneCheckInLog>({});
+  const [zoneLogReady, setZoneLogReady] = useState(false);
+
+  useEffect(() => {
+    setZoneLog(loadZoneCheckIns());
+    setZoneLogReady(true);
+  }, []);
+
+  const weeklySummary = useMemo(
+    () => (zoneLogReady ? getWeeklyCheckInSummary(zoneLog) : null),
+    [zoneLog, zoneLogReady]
+  );
+
+  const handleZoneTap = (z: { id: ZoneId }, currentlySelected: boolean) => {
+    if (!currentlySelected) {
+      // This is a *selection* — log the check-in quietly.
+      const updated = logZoneCheckIn(z.id, zoneLog);
+      setZoneLog(updated);
+      // Reset the note input — it's blank for this fresh check-in.
+      setZoneNote('');
+    }
+    setZone(currentlySelected ? null : z.id);
+  };
+
+  // Called as the user types in the note input. Updates the just-logged
+  // entry's note in real time so the weekly view reflects it immediately.
+  const handleZoneNoteChange = (value: string) => {
+    setZoneNote(value);
+    const updated = updateLastZoneCheckInNote(value, zoneLog);
+    setZoneLog(updated);
+  };
+
   // Concrete, loggable actions shown in the detail panel for the selected zone.
   const tryNow = useMemo(() => {
     if (!zone) return [];
@@ -153,8 +266,78 @@ export function CheckIn() {
 
   const activeZone = zone ? NS_ZONES.find((z) => z.id === zone) ?? null : null;
 
+  // "One Small Thing" — deterministic per-day pick from Daily Maintenance +
+  // Quick Starters. Stays the same all day, changes at midnight local.
+  // This is the "remember to actually do it" piece: no deciding, no
+  // scrolling — the day's work is chosen for the user.
+  const todaysPick = useMemo(() => pickDailyOneSmallThing(), []);
+  const todaysPickDone = doneToday.has(todaysPick);
+
   return (
     <div className="flex flex-col gap-6">
+      {/* One Small Thing — picked fresh each day, always at the top.
+          The whole point: no deciding, no scrolling. The day's work is
+          chosen for you. Just do it, then tap Mark done. */}
+      <section
+        className="rounded-xl p-4"
+        style={{
+          backgroundColor: t.cardBg,
+          border: `2px solid ${todaysPickDone ? t.lightLine : t.btnBg}`,
+          opacity: todaysPickDone ? 0.75 : 1,
+          transition: 'all 0.2s',
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p
+              className="text-xs font-semibold uppercase tracking-wide"
+              style={{ color: t.muted }}
+            >
+              One small thing today
+            </p>
+            <p className="text-base font-semibold mt-1.5" style={{ color: t.text }}>
+              {todaysPick}
+            </p>
+            <p className="text-xs mt-1.5" style={{ color: t.muted }}>
+              {todaysPickDone ? ONE_SMALL_THING_DONE : ONE_SMALL_THING_INTRO}
+            </p>
+          </div>
+          <DoneButton
+            done={todaysPickDone}
+            onToggle={() => toggle(todaysPick)}
+            cardBg={t.hover}
+          />
+        </div>
+      </section>
+
+      {/* Guided breathing — a real, animated breathing circle you can open
+          in the hard moment. Tap and it walks you through box breathing
+          or the long-exhale version, at your pace, for as long as you
+          want. Instead of reading "try slow exhale breathing," you just
+          do it, right there. */}
+      <section
+        className="rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap"
+        style={{ backgroundColor: t.hover, border: `1px solid ${t.lightLine}` }}
+      >
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold" style={{ color: t.text }}>
+            Need a moment?
+          </h2>
+          <p className="text-xs mt-1" style={{ color: t.muted }}>
+            Open the breathing circle and follow it for as long as you want.
+          </p>
+        </div>
+        <BreathingButton />
+      </section>
+
+      {/* Gentle weekly check-in summary — "You checked in 5 times this
+          week, mostly in your window." Quiet, factual, therapist-look-atable.
+          Shown on both this tab (rolling 7-day window) AND the Weekly tab
+          (selected Monday-anchored week). */}
+      {weeklySummary && weeklySummary.total > 0 && (
+        <CheckInSummary summary={weeklySummary} periodNoun="this week" />
+      )}
+
       {/* Practice strip */}
       <section
         className="rounded-xl p-4"
@@ -188,7 +371,7 @@ export function CheckIn() {
               return (
                 <button
                   key={z.id}
-                  onClick={() => setZone(selected ? null : z.id)}
+                  onClick={() => handleZoneTap(z, selected)}
                   aria-pressed={selected}
                   className="w-full text-left rounded-xl px-4 flex flex-col justify-center"
                   style={{
@@ -225,6 +408,57 @@ export function CheckIn() {
                   <h3 className="text-base font-semibold" style={{ color: t.text }}>{activeZone.name}</h3>
                   <p className="text-xs mt-0.5" style={{ color: t.muted }}>{activeZone.feelLine}</p>
                 </div>
+
+                {/* Optional one-line "what was happening" note. This is what
+                    turns the weekly summary from "5 check-ins, mostly in your
+                    window" into "5 check-ins: Tuesday at work (hyper), Wednesday
+                    morning (hypo)…" — the richer, therapist-reviewable view. */}
+                <div>
+                  <label
+                    className="block text-xs font-medium mb-1.5"
+                    style={{ color: t.muted }}
+                  >
+                    What was happening? <span style={{ opacity: 0.6 }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={zoneNote}
+                    onChange={(e) => handleZoneNoteChange(e.target.value)}
+                    placeholder="e.g., at work, with a friend, after a call…"
+                    maxLength={140}
+                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{
+                      backgroundColor: t.hover,
+                      border: `1px solid ${t.lightLine}`,
+                      color: t.text,
+                      minHeight: 44,
+                      transition: 'border-color 0.2s',
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = t.border)}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = t.lightLine)}
+                  />
+                </div>
+
+                {/* Breathing button — show only when the user is outside
+                    their window (hyper/hypo). Inside the window they don't
+                    need to "breathe to calm down"; outside, it's exactly
+                    the right tool. */}
+                {activeZone.id !== 'window' && (
+                  <div
+                    className="rounded-lg p-3 flex items-center justify-between gap-3 flex-wrap"
+                    style={{ backgroundColor: t.hover, border: `1px solid ${t.lightLine}` }}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold" style={{ color: t.text }}>
+                        Breathe with me first
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: t.muted }}>
+                        30 seconds of guided breathing before trying anything else.
+                      </p>
+                    </div>
+                    <BreathingButton variant="inline" />
+                  </div>
+                )}
 
                 <div>
                   <h4 className="text-sm font-semibold">{activeZone.listTitle}</h4>
@@ -386,6 +620,27 @@ export function Toolbox() {
         </div>
         <span className="text-xs shrink-0" style={{ color: t.muted }}>{todayCount} tried today</span>
       </div>
+
+      {/* Guided breathing — first card in the Toolbox, because it's the
+          single most useful thing in the hard moment and doesn't require
+          any setup or scrolling. */}
+      <section
+        className="rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap"
+        style={{
+          backgroundColor: t.cardBg,
+          border: `2px solid ${t.border}`,
+        }}
+      >
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold" style={{ color: t.text }}>
+            Guided breathing
+          </h3>
+          <p className="text-sm mt-1" style={{ color: t.muted }}>
+            An animated circle walks you through box breathing or the long-exhale version, at your pace, for as long as you want.
+          </p>
+        </div>
+        <BreathingButton label="Start breathing" />
+      </section>
 
       {/* Choose by energy level */}
       <div>

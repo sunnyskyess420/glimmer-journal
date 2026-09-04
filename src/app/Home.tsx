@@ -19,6 +19,8 @@ import { CheckIn, Toolbox } from '@/components/journal/Regulate';
 import GlimmerBank from '@/components/journal/GlimmerBank';
 import WeeklyReflection from '@/components/journal/WeeklyReflection';
 import StatsView from '@/components/journal/StatsView';
+import { useReminder } from '@/hooks/use-reminder';
+import { useReminderBridge } from '@/hooks/use-reminder-bridge';
 
 const TABS = [
   { id: 'daily', label: 'Daily Entry' },
@@ -50,6 +52,17 @@ export default function Home() {
   const t: ThemeColors = THEMES[theme];
   const [initializing, setInitializing] = useState(true);
   const [footerIdx, setFooterIdx] = useState(0);
+
+  // Mount the daily-reminder polling. Runs only while the user is signed
+  // in (no point firing reminders for the auth screen). The hook reads
+  // the latest reminder settings on each tick so toggling it in the
+  // Sidebar updates behavior immediately.
+  useReminder();
+  // Bridge that lets the service worker read/write localStorage for the
+  // reminder settings + practice log. Required for the SW-side periodic
+  // background sync (Chrome/Edge only) to know whether today's small
+  // thing has been done.
+  useReminderBridge();
 
   // Rotating footer messages
   useEffect(() => {

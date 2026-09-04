@@ -15,6 +15,8 @@ import {
   SLEEP_LABELS,
   STRESS_LABELS,
 } from './constants';
+import type { ZoneCheckInSummary } from './regulate-content';
+import { NS_ZONES } from './regulate-content';
 
 export interface ExportOptions {
   /** ISO date string (yyyy-mm-dd) — inclusive. Empty = no lower bound. */
@@ -831,6 +833,272 @@ export async function exportJournalToPdf(
       ? `_${(options.startDate || '').replace(/-/g, '')}-${(options.endDate || '').replace(/-/g, '')}`
       : '';
     const filename = `glimmer-journal_${todayStr}${rangeSlug}.pdf`;
+    doc.save(filename);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ============================================================================
+// Focused week export — "Share this week with my therapist"
+// ============================================================================
+//
+// A focused PDF of one Monday-anchored week only: cover → check-in summary
+// (with notes) → daily entries for the week → weekly reflection. Designed
+// to be emailed ahead of a session or pulled up on a tablet during one.
+// Smaller and more focused than the full `exportJournalToPdf` report.
+
+export interface WeekExportOptions {
+  /** Monday-anchored week start, `yyyy-mm-dd`. */
+  weekStart: string;
+  /** Optional user name/email for the cover. */
+  userName?: string;
+  /** Optional one-line note the user wants to add at the top. */
+  note?: string;
+  /** Zone check-in summary for this week (with notes). Optional but
+      recommended — provides the richer nervous-system view. */
+  checkInSummary?: ZoneCheckInSummary | null;
+  /** Weekly reflection answers (3 strings) if any. */
+  reflection?: string[] | null;
+}
+
+function formatDateLongLocal(iso: string): string {
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function formatTimeLocal(ts: number): string {
+  return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+// Render the "Check-in summary" section: total count, per-zone bars,
+// and day-by-day list of check-ins with optional notes. This mirrors
+// the on-screen CheckInSummary component but in PDF form.
+function renderWeekCheckInSummary(
+  doc: jsPDF,
+  cursor: Cursor,
+  summary: ZoneCheckInSummary,
+  weekStart: string
+) {
+  doc.addPage();
+  cursor.y = MARGIN;
+  writeSectionHeader(doc, cursor, 'Check-in Summary', formatWeekRange(weekStart));
+
+  // Top line: total + "mostly in X"
+  const topZoneName = (() => {
+    if (!summary.topZone) return null;
+    const match = NS_ZONES.find((nz) => nz.id === summary.topZone);
+    return match ? match.name.toLowerCase() : null;
+  })();
+
+  writeParagraph(doc, cursor, `You checked in ${summary.total} ${summary.total === 1 ? 'time' : 'times'} this week${topZoneName ? ` \u2014 mostly in ${topZoneName}` : ''}.`, {
+    fontSize: BODY_FONT_SIZE,
+    style: 'normal',
+    gapAfter: 10,
+  });
+
+  // Per-zone bars (matching the on-screen 3-column view)
+  const barLabelX = MARGIN;
+  const barX = MARGIN + 90;
+  const barMax = CONTENT_WIDTH - 90 - 30;
+  const maxCount = Math.max(summary.byZone.hyper, summary.byZone.window, summary.byZone.hypo, 1);
+  NS_ZONES.forEach((z) => {
+    const count = summary.byZone[z.id] ?? 0;
+    const barW = (count / maxCount) * barMax;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(BODY_FONT_SIZE);
+    setTextColor(doc, TEXT_RGB);
+    doc.text(z.name.toLowerCase(), barLabelX, cursor.y);
+    doc.setFillColor(...LIGHT_LINE_RGB);
+    doc.rect(barX, cursor.y - 8, barMax, 8, 'F');
+    doc.setFillColor(...ACCENT_RGB);
+    doc.rect(barX, cursor.y - 8, Math.max(barW, 2), 8, 'F');
+    doc.setFont('helvetica', 'normal');
+    setTextColor(doc, MUTED_RGB);
+    doc.text(String(count), barX + barMax + 8, cursor.y);
+    cursor.y += 18;
+  });
+  cursor.y += 8;
+
+  // Day-by-day check-ins (with notes) — the richer, therapist-reviewable view.
+  const daysWithEntries = summary.days.filter((d) => d.entries.length > 0);
+  if (daysWithEntries.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(H3_SIZE);
+    setTextColor(doc, TEXT_RGB);
+    ensureSpace(doc, cursor, 24);
+    doc.text('Check-ins by day', MARGIN, cursor.y);
+    cursor.y += 18;
+
+    daysWithEntries.forEach((day) => {
+      ensureSpace(doc, cursor, 22 + day.entries.length * 14);
+      // Day header
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(BODY_FONT_SIZE);
+      setTextColor(doc, TEXT_RGB);
+      doc.text(formatDateLongLocal(day.date), MARGIN, cursor.y);
+      cursor.y += 16;
+
+      // Each check-in entry — zone + time + note (if any)
+      day.entries.forEach((entry) => {
+        ensureSpace(doc, cursor, 16);
+        const zone = NS_ZONES.find((nz) => nz.id === entry.zone);
+        const zoneName = zone ? zone.name.toLowerCase() : entry.zone;
+        const timeStr = formatTimeLocal(entry.ts);
+
+        doc.setFont('helvetica', 'bold');
+        setTextColor(doc, ACCENT_RGB);
+        doc.text(zoneName, MARGIN + 12, cursor.y);
+        const zoneWidth = doc.getTextWidth(zoneName);
+
+        doc.setFont('helvetica', 'normal');
+        setTextColor(doc, MUTED_RGB);
+        doc.text(`  ${timeStr}`, MARGIN + 12 + zoneWidth, cursor.y);
+        const timeWidth = doc.getTextWidth(`  ${timeStr}`);
+
+        if (entry.note) {
+          doc.setFont('helvetica', 'italic');
+          setTextColor(doc, TEXT_RGB);
+          const noteLines = splitText(doc, entry.note, BODY_FONT_SIZE, CONTENT_WIDTH - 12 - zoneWidth - timeWidth - 8);
+          noteLines.forEach((line, i) => {
+            if (i > 0) {
+              cursor.y += LINE_HEIGHT;
+              ensureSpace(doc, cursor, LINE_HEIGHT);
+            }
+            doc.text(line, MARGIN + 12 + zoneWidth + timeWidth + 8, cursor.y);
+          });
+        }
+        cursor.y += 14;
+      });
+      cursor.y += 6;
+    });
+  }
+}
+
+// Render just the entries for the given week (filtered by caller).
+function renderWeekEntries(
+  doc: jsPDF,
+  cursor: Cursor,
+  entries: GlimmerEntry[],
+  weekStart: string
+) {
+  if (entries.length === 0) return;
+  doc.addPage();
+  cursor.y = MARGIN;
+  writeSectionHeader(doc, cursor, 'Daily Entries', `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}  ·  ${formatWeekRange(weekStart)}`);
+
+  // Sort chronologically (oldest first) — matches the on-screen chronological order.
+  const sorted = [...entries].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return a.promptIndex - b.promptIndex;
+  });
+  sorted.forEach((entry) => {
+    renderEntry(doc, cursor, entry, { compact: false });
+    cursor.y += 6;
+  });
+}
+
+// Render just the weekly reflection for the given week.
+function renderWeekReflection(
+  doc: jsPDF,
+  cursor: Cursor,
+  responses: string[],
+  weekStart: string
+) {
+  // Treat empty/all-blank responses as "no reflection this week."
+  const hasAnyContent = responses.some((r) => r && r.trim().length > 0);
+  if (!hasAnyContent) return;
+
+  doc.addPage();
+  cursor.y = MARGIN;
+  writeSectionHeader(doc, cursor, 'Weekly Reflection', formatWeekRange(weekStart));
+
+  const WEEKLY_PROMPTS = [
+    'This week I noticed my body felt safest when\u2026',
+    'I felt most disconnected or activated on\u2026',
+    'One thing I want to do more of next week to feel safe\u2026',
+  ];
+
+  responses.forEach((response, idx) => {
+    if (idx >= WEEKLY_PROMPTS.length) return;
+    const prompt = WEEKLY_PROMPTS[idx];
+    // Prompt
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(SMALL_FONT_SIZE);
+    setTextColor(doc, MUTED_RGB);
+    const promptLines = splitText(doc, prompt, SMALL_FONT_SIZE, CONTENT_WIDTH);
+    promptLines.forEach((line) => {
+      ensureSpace(doc, cursor, 14);
+      doc.text(line, MARGIN, cursor.y);
+      cursor.y += 13;
+    });
+    cursor.y += 6;
+    // Response
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(BODY_FONT_SIZE);
+    setTextColor(doc, TEXT_RGB);
+    const responseLines = splitText(doc, response || '\u2014', BODY_FONT_SIZE, CONTENT_WIDTH - 16);
+    responseLines.forEach((line) => {
+      ensureSpace(doc, cursor, LINE_HEIGHT);
+      doc.text(line, MARGIN + 16, cursor.y);
+      cursor.y += LINE_HEIGHT;
+    });
+    cursor.y += 14;
+  });
+}
+
+export async function exportWeekToPdf(
+  allEntries: GlimmerEntry[],
+  options: WeekExportOptions
+): Promise<ExportResult> {
+  try {
+    // Compute the week's date range from weekStart (Monday-anchored).
+    const start = new Date(options.weekStart + 'T12:00:00');
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const startStr = options.weekStart;
+    const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+
+    // Filter entries to this week only.
+    const weekEntries = allEntries.filter((e) => e.date >= startStr && e.date <= endStr);
+
+    const rangeLabel = formatWeekRange(options.weekStart);
+    const doc = new jsPDF({ unit: 'pt', format: 'letter', compress: true });
+    const cursor: Cursor = { y: MARGIN };
+
+    // Cover page — focused wording for the per-week export.
+    renderCover(doc, cursor, {
+      userName: options.userName,
+      rangeLabel,
+      note: options.note,
+    });
+
+    // Override the default "For review with your trauma therapist" subtitle
+    // by adding a focused subtitle line after the cover content. Actually
+    // we'll let the cover's existing "For review with your trauma therapist"
+    // line stay — it's accurate.
+
+    // 1. Check-in summary (with notes) — the nervous-system shape of the week.
+    if (options.checkInSummary && options.checkInSummary.total > 0) {
+      renderWeekCheckInSummary(doc, cursor, options.checkInSummary, options.weekStart);
+    }
+
+    // 2. Daily entries for the week.
+    renderWeekEntries(doc, cursor, weekEntries, options.weekStart);
+
+    // 3. Weekly reflection for the week.
+    if (options.reflection) {
+      renderWeekReflection(doc, cursor, options.reflection, options.weekStart);
+    }
+
+    addPageNumbers(doc);
+
+    // Filename: glimmer-week_YYYY-MM-DD_weekstart.pdf
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const weekSlug = options.weekStart.replace(/-/g, '');
+    const filename = `glimmer-week_${todayStr}_${weekSlug}.pdf`;
     doc.save(filename);
     return { success: true };
   } catch (err) {

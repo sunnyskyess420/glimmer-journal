@@ -10,6 +10,17 @@ import {
 } from '@/lib/constants';
 import { useJournalStore } from '@/store/journal-store';
 import { updateUserTheme } from '@/lib/supabase-service';
+import {
+  DEFAULT_REMINDER,
+  formatReminderTime,
+  getPermission,
+  loadReminderSettings,
+  notificationsSupported,
+  requestPermission,
+  saveReminderSettings,
+  type ReminderSettings,
+} from '@/lib/reminder';
+import { checkAndFire } from '@/lib/reminder';
 import ExportDialog from './ExportDialog';
 import InstallHelpDialog from './InstallHelpDialog';
 
@@ -42,6 +53,52 @@ export default function Sidebar({ onLogout }: SidebarProps) {
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
+
+  // Daily reminder state — opt-in toggle + time picker. Persists to
+  // localStorage so it survives reloads. The actual firing happens in
+  // the `useReminder` hook mounted at the app root (Home.tsx); here we
+  // just manage the settings.
+  const [reminder, setReminder] = useState<ReminderSettings>(DEFAULT_REMINDER);
+  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('default');
+
+  useEffect(() => {
+    setReminder(loadReminderSettings());
+    setPermission(getPermission());
+  }, []);
+
+  const updateReminder = (updates: Partial<ReminderSettings>) => {
+    setReminder((prev) => {
+      const next = { ...prev, ...updates };
+      saveReminderSettings(next);
+      // After changing settings, immediately run the check so the user
+      // sees the effect without waiting for the next 5-min tick.
+      // (willFire returns false if outside the window, so this is safe.)
+      checkAndFire(next);
+      return next;
+    });
+  };
+
+  const handleEnableReminder = async () => {
+    // Always request permission first. If the user denies, we still save
+    // the "enabled" flag but no notifications will fire — the in-app
+    // banner will still work (which we could wire later).
+    if (getPermission() === 'default') {
+      const result = await requestPermission();
+      setPermission(result);
+      if (result !== 'granted') {
+        // Permission denied — don't enable. The UI explains the state.
+        return;
+      }
+    } else if (getPermission() === 'denied') {
+      // Already denied at the browser level. Can't ask again.
+      return;
+    }
+    updateReminder({ enabled: true });
+  };
+
+  const handleDisableReminder = () => {
+    updateReminder({ enabled: false });
+  };
 
   // Capture the beforeinstallprompt event so we can trigger install on demand.
   // Not all browsers fire this (notably iOS Safari never does, and Brave often
@@ -171,6 +228,104 @@ export default function Sidebar({ onLogout }: SidebarProps) {
             })}
           </div>
         </div>
+
+        {/* Daily reminder for "One Small Thing" — opt-in.
+            Honest about the platform limit: fires when the app is open
+            OR when installed as a PWA on Chrome/Edge (background sync).
+            iOS/Safari can only fire when the app is open. */}
+        {notificationsSupported() && (
+          <div className="mb-3">
+            <p className="text-xs font-medium mb-2" style={{ color: t.muted }}>
+              Daily reminder
+            </p>
+
+            {permission === 'denied' ? (
+              <p className="text-xs leading-relaxed" style={{ color: t.muted }}>
+                You blocked notifications for this site. To re-enable, open your
+                browser's site settings and allow notifications, then come back here.
+              </p>
+            ) : (
+              <>
+                <div
+                  className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
+                  style={{ backgroundColor: t.hover }}
+                >
+                  <span className="text-sm" style={{ color: t.text }}>
+                    {reminder.enabled
+                      ? `Remind me at ${formatReminderTime(reminder)}`
+                      : 'Remind me about today\u2019s small thing'}
+                  </span>
+                  <button
+                    onClick={() =>
+                      reminder.enabled ? handleDisableReminder() : handleEnableReminder()
+                    }
+                    aria-pressed={reminder.enabled}
+                    className="rounded-full transition-colors shrink-0"
+                    style={{
+                      width: 40,
+                      height: 22,
+                      backgroundColor: reminder.enabled ? t.btnBg : t.lightLine,
+                      border: 'none',
+                      position: 'relative',
+                      cursor: 'pointer',
+                    }}
+                    aria-label={reminder.enabled ? 'Disable reminder' : 'Enable reminder'}
+                  >
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 2,
+                        left: reminder.enabled ? 20 : 2,
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        backgroundColor: '#FFFFFF',
+                        transition: 'left 0.15s',
+                      }}
+                    />
+                  </button>
+                </div>
+
+                {/* Time picker — only visible once reminders are on,
+                    so the first-time user sees a simple toggle. */}
+                {reminder.enabled && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="text-xs shrink-0" style={{ color: t.muted }}>
+                      At
+                    </label>
+                    <input
+                      type="time"
+                      value={`${String(reminder.hour).padStart(2, '0')}:${String(reminder.minute).padStart(2, '0')}`}
+                      onChange={(e) => {
+                        const [h, m] = e.target.value.split(':').map((n) => parseInt(n, 10));
+                        if (!Number.isNaN(h) && !Number.isNaN(m)) {
+                          updateReminder({ hour: h, minute: m, lastNotifiedDate: null });
+                        }
+                      }}
+                      className="px-2 py-1 rounded-md text-sm"
+                      style={{
+                        backgroundColor: t.hover,
+                        border: `1px solid ${t.lightLine}`,
+                        color: t.text,
+                        minHeight: 36,
+                      }}
+                    />
+                    <span className="text-xs" style={{ color: t.muted }}>
+                      local time
+                    </span>
+                  </div>
+                )}
+
+                {reminder.enabled && (
+                  <p className="text-[10px] mt-2 leading-relaxed" style={{ color: t.muted }}>
+                    Fires when the app is open, or in the background when installed
+                    as a PWA on Chrome/Edge. iOS Safari only fires when the app is open.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Date list */}

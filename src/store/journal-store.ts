@@ -88,7 +88,10 @@ export const useJournalStore = create<JournalStore>((set) => ({
   setStats: (stats) => set({ stats }),
   theme: 'Mono',
   setTheme: (theme) => set({ theme }),
-  activeTab: 'daily',
+  // Default to Check-in instead of Daily Entry. The whole point of the app
+  // is "where are you right now" — that question should be the first thing
+  // the user sees when they open it. Journaling (Daily Entry) comes after.
+  activeTab: 'checkin',
   setActiveTab: (tab) => set({ activeTab: tab }),
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
