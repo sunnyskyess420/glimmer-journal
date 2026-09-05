@@ -10,13 +10,7 @@ import {
 import { useJournalStore } from '@/store/journal-store';
 import { fetchReflection, saveReflection as saveReflectionSvc } from '@/lib/supabase-service';
 import { localWeekStart } from '@/lib/utils';
-import {
-  loadZoneCheckIns,
-  getWeeklyCheckInSummaryForWeek,
-  type ZoneCheckInLog,
-} from '@/lib/regulate-content';
 import { exportWeekToPdf } from '@/lib/pdf-export';
-import CheckInSummary from './CheckInSummary';
 
 // Keep local getWeekStart for backward-compatibility inside this file — but
 // delegate to the timezone-correct localWeekStart helper. Old version used
@@ -45,25 +39,7 @@ export default function WeeklyReflection() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Zone check-in log — loaded once on mount. Used to show the gentle
-  // weekly summary for the currently-displayed week, so the user (and
-  // their therapist) can review the shape of their nervous-system week
-  // alongside the written reflection.
-  const [zoneLog, setZoneLog] = useState<ZoneCheckInLog>({});
-  const [zoneLogReady, setZoneLogReady] = useState(false);
-  useEffect(() => {
-    setZoneLog(loadZoneCheckIns());
-    setZoneLogReady(true);
-  }, []);
-
   const weekStart = useMemo(() => getWeekStart(currentDate), [currentDate]);
-
-  // Per-week summary. Recomputes whenever the user navigates to a
-  // different week OR the underlying log changes.
-  const weeklySummary = useMemo(
-    () => (zoneLogReady ? getWeeklyCheckInSummaryForWeek(weekStart, zoneLog) : null),
-    [weekStart, zoneLog, zoneLogReady]
-  );
   
   // Memoize week entries to prevent recalculating on every render
   const weekEntries = useMemo(() => 
@@ -134,7 +110,10 @@ export default function WeeklyReflection() {
       const result = await exportWeekToPdf(entries, {
         weekStart,
         userName: user?.name || user?.email,
-        checkInSummary: weeklySummary,
+        // No zone check-in summary anymore — the user explicitly asked
+        // that zone taps not create stats. Only skills they actually
+        // mark done get counted (in the practice log).
+        checkInSummary: null,
         reflection: responses,
       });
       if (result.success) {
@@ -150,11 +129,10 @@ export default function WeeklyReflection() {
   };
 
   // Disable the share button if there's literally nothing this week —
-  // no entries, no check-ins, no reflection answers. We don't want to
-  // generate a 1-page empty cover for a week the user is just browsing.
+  // no entries, no reflection answers. We don't want to generate a 1-page
+  // empty cover for a week the user is just browsing.
   const hasAnythingToShare =
     weekEntries.length > 0 ||
-    (weeklySummary && weeklySummary.total > 0) ||
     responses.some((r) => r && r.trim().length > 0);
 
   if (loading) {
@@ -198,19 +176,9 @@ export default function WeeklyReflection() {
           </button>
         </div>
 
-        {/* Gentle weekly check-in summary — show even on weeks with no
-            written entries, because the user may still have tapped zones
-            in Check-in. This gives the user (and their therapist) a real
-            thing to look at together even without journaling. */}
-        {weeklySummary && weeklySummary.total > 0 && (
-          <div className="w-full max-w-2xl">
-            <CheckInSummary summary={weeklySummary} periodNoun="that week" showDays />
-          </div>
-        )}
-
-        {/* Share-this-week button — visible even on no-entry weeks if there
-            are zone check-ins to share. The PDF will contain the cover +
-            check-in summary (with notes) + (empty) weekly reflection. */}
+        {/* Share-this-week button — visible even on no-entry weeks if
+            there's a saved weekly reflection to share. The PDF will
+            contain the cover + (empty) daily entries + the reflection. */}
         {hasAnythingToShare && (
           <button
             onClick={handleShareWeek}
@@ -288,15 +256,6 @@ export default function WeeklyReflection() {
           </svg>
         </button>
       </div>
-
-      {/* Gentle weekly check-in summary — surfaces the user's nervous-system
-          week alongside the written reflection. Same component as the one
-          on the Check-in tab, but scoped to the selected week (which may
-          be a past one) so the user and their therapist can review any week
-          together. */}
-      {weeklySummary && weeklySummary.total > 0 && (
-        <CheckInSummary summary={weeklySummary} periodNoun="that week" showDays />
-      )}
 
       {/* Reflection prompts */}
       <div className="flex flex-col gap-4">

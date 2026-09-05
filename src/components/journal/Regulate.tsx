@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { THEMES, PRACTICE_MILESTONES, type ThemeColors } from '@/lib/constants';
 import {
   NS_ZONES,
@@ -15,16 +15,12 @@ import {
   savePracticeLog,
   recentDates,
   pickDailyOneSmallThing,
-  loadZoneCheckIns,
-  logZoneCheckIn,
-  updateLastZoneCheckInNote,
   loadShownPracticeMilestones,
   markPracticeMilestoneShown,
   getPracticeStreakDays,
   getTotalPracticeCount,
   type ZoneId,
   type PracticeLog,
-  type ZoneCheckInLog,
 } from '@/lib/regulate-content';
 import { useJournalStore } from '@/store/journal-store';
 import BreathingButton from './BreathingButton';
@@ -208,58 +204,13 @@ export function CheckIn() {
 
   const [zone, setZone] = useState<ZoneId | null>(null);
 
-  // Optional one-line "what was happening" note attached to the most
-  // recent zone check-in. Reset every time the user taps a new zone so
-  // the input starts blank for the new entry.
-  const [zoneNote, setZoneNote] = useState('');
-
-  // Visible "✓ Saved" indicator so the user knows their note actually
-  // went somewhere. Without this, the auto-save is invisible and the
-  // input feels like a dead end. Shows for ~1.5s after the user stops
-  // typing; if they keep typing, the timer resets so it stays visible.
-  const [noteSavedVisible, setNoteSavedVisible] = useState(false);
-  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showSavedIndicator = () => {
-    setNoteSavedVisible(true);
-    if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
-    savedTimeoutRef.current = setTimeout(() => setNoteSavedVisible(false), 1500);
-  };
-  useEffect(() => {
-    return () => {
-      if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
-    };
-  }, []);
-
-  // Zone check-in log — every tap on a zone quietly counts toward the
-  // gentle weekly summary ("You checked in 5 times this week, mostly in
-  // your window"). We keep a local copy in state so the summary updates
-  // immediately when the user taps.
-  const [zoneLog, setZoneLog] = useState<ZoneCheckInLog>({});
-
-  useEffect(() => {
-    setZoneLog(loadZoneCheckIns());
-  }, []);
-
+  // Tapping a zone just shows its detail panel — it does NOT create a
+  // stat. Only marking a skill done (the "Mark done" button inside the
+  // panel) creates a logged practice entry. The user explicitly asked
+  // for this: clicking a zone to see what's there isn't the same as
+  // doing the work. So `handleZoneTap` just toggles the selection.
   const handleZoneTap = (z: { id: ZoneId }, currentlySelected: boolean) => {
-    if (!currentlySelected) {
-      // This is a *selection* — log the check-in quietly.
-      const updated = logZoneCheckIn(z.id, zoneLog);
-      setZoneLog(updated);
-      // Reset the note input — it's blank for this fresh check-in.
-      setZoneNote('');
-    }
     setZone(currentlySelected ? null : z.id);
-  };
-
-  // Called as the user types in the note input. Updates the just-logged
-  // entry's note in real time so the weekly view reflects it immediately.
-  // Also flashes a "✓ Saved" indicator so the user can see the note went
-  // somewhere — without it, the auto-save is invisible.
-  const handleZoneNoteChange = (value: string) => {
-    setZoneNote(value);
-    const updated = updateLastZoneCheckInNote(value, zoneLog);
-    setZoneLog(updated);
-    showSavedIndicator();
   };
 
   // Concrete, loggable actions shown in the detail panel for the selected zone.
@@ -392,56 +343,6 @@ export function CheckIn() {
                 <div>
                   <h3 className="text-base font-semibold" style={{ color: t.text }}>{activeZone.name}</h3>
                   <p className="text-xs mt-0.5" style={{ color: t.muted }}>{activeZone.feelLine}</p>
-                </div>
-
-                {/* Optional one-line "what was happening" note. This is what
-                    turns the weekly summary from "5 check-ins, mostly in your
-                    window" into "5 check-ins: Tuesday at work (hyper), Wednesday
-                    morning (hypo)…" — the richer, therapist-reviewable view. */}
-                <div>
-                  <div className="flex items-baseline justify-between gap-2 mb-1.5">
-                    <label
-                      className="block text-xs font-medium"
-                      style={{ color: t.muted }}
-                    >
-                      What was happening? <span style={{ opacity: 0.6 }}>(optional)</span>
-                    </label>
-                    {/* Visible "✓ Saved" indicator — fades in after each
-                        keystroke, fades out ~1.5s after the user stops
-                        typing. Replaces the dead-end feeling of an
-                        auto-saving input with no visible confirmation. */}
-                    <span
-                      className="text-[10px] font-medium"
-                      style={{
-                        color: t.muted,
-                        opacity: noteSavedVisible ? 1 : 0,
-                        transition: 'opacity 0.2s',
-                      }}
-                      aria-live="polite"
-                    >
-                      ✓ Saved
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    value={zoneNote}
-                    onChange={(e) => handleZoneNoteChange(e.target.value)}
-                    placeholder="e.g., at work, with a friend, after a call…"
-                    maxLength={140}
-                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                    style={{
-                      backgroundColor: t.hover,
-                      border: `1px solid ${t.lightLine}`,
-                      color: t.text,
-                      minHeight: 44,
-                      transition: 'border-color 0.2s',
-                    }}
-                    onFocus={(e) => (e.currentTarget.style.borderColor = t.border)}
-                    onBlur={(e) => (e.currentTarget.style.borderColor = t.lightLine)}
-                  />
-                  <p className="text-[10px] mt-1" style={{ color: t.muted, opacity: 0.7 }}>
-                    Saves automatically. Shows up in your weekly summary.
-                  </p>
                 </div>
 
                 {/* Breathing button — show only when the user is outside
