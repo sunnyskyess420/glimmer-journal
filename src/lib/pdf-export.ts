@@ -549,6 +549,21 @@ function renderEntry(
     doc.text(line, cardX + padLeft, cursor.y);
     cursor.y += LINE_HEIGHT;
   });
+
+  // Optional "what was happening" note — rendered in italic muted text
+  // right under the response, indented to match.
+  if (entry.note) {
+    cursor.y += 4;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(SMALL_FONT_SIZE);
+    setTextColor(doc, MUTED_RGB);
+    const noteLines = splitText(doc, `· ${entry.note}`, SMALL_FONT_SIZE, innerW - 16);
+    noteLines.forEach((line) => {
+      doc.text(line, cardX + padLeft + 8, cursor.y);
+      cursor.y += 12;
+    });
+    setTextColor(doc, TEXT_RGB);
+  }
   cursor.y += 10;
 
   if (!compact) {

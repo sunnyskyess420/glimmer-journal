@@ -48,6 +48,10 @@ export default function DailyEntry() {
   const [stressLevel, setStressLevel] = useState(0);
   const [duration, setDuration] = useState('');
   const [response, setResponse] = useState('');
+  // Optional one-line "what was happening" context — attached to the
+  // entry. Stored alongside tags in the same Supabase column (smuggled
+  // as a `_note` key) so no schema migration is needed.
+  const [note, setNote] = useState('');
 
   const dateEntries = useMemo(() => entries.filter((e) => e.date === selectedDate), [entries, selectedDate]);
 
@@ -72,35 +76,25 @@ export default function DailyEntry() {
     setStressLevel(0);
     setDuration('');
     setResponse('');
+    setNote('');
     setSelectedPrompt(null);
     setEditingEntry(null);
   }, []);
 
   const handleSelectPrompt = useCallback((idx: number) => {
-    // Check if there's already an entry for this prompt on this date
-    const existing = dateEntries.find((e) => e.promptIndex === idx);
-    if (existing) {
-      setEditingEntry(existing);
-      setPreState(existing.preState);
-      setPostState(existing.postState);
-      setIntensity(existing.intensity);
-      setBodyLocation(existing.bodyLocation);
-      try { setTags(JSON.parse(existing.tags || '[]')); } catch { setTags([]); }
-      setSleepQuality(existing.sleepQuality);
-      setStressLevel(existing.stressLevel);
-      setDuration(existing.duration);
-      setResponse(existing.response);
-    } else {
-      resetForm();
-    }
+    // Always start a NEW entry. The user can feel "beautiful" more than
+    // once a day, so tapping a prompt should never auto-load an existing
+    // entry — it should always start a blank form. To edit an existing
+    // entry, the user taps the edit button on that entry's card below.
+    resetForm();
     setSelectedPrompt(idx);
-  }, [dateEntries, resetForm]);
+  }, [resetForm]);
 
   const toggleTag = (tag: string) => {
     setTags((prev) => (prev.includes(tag) ? prev.filter((t2) => t2 !== tag) : [...prev, tag]));
   };
 
-  const handleSave = async () => {
+  const handleSave = async (opts: { addAnother?: boolean } = {}) => {
     if (selectedPrompt === null || !response.trim()) return;
     setSaving(true);
 
@@ -116,6 +110,7 @@ export default function DailyEntry() {
         duration,
         bodyLocation,
         tags: JSON.stringify(tags),
+        note: note.trim(),
         sleepQuality,
         stressLevel,
         starred: editingEntry?.starred ?? false,
@@ -137,7 +132,18 @@ export default function DailyEntry() {
 
       const msg = TOAST_MESSAGES[Math.floor(Math.random() * TOAST_MESSAGES.length)];
       showToast(msg);
-      resetForm();
+
+      if (opts.addAnother) {
+        // Save the current entry, then start a fresh blank form for the
+        // SAME prompt. Lets the user chain multiple "beautiful" entries
+        // without going back to the grid. We keep `selectedPrompt` set
+        // so the form stays open; only the form fields reset.
+        const keepPrompt = selectedPrompt;
+        resetForm();
+        setSelectedPrompt(keepPrompt);
+      } else {
+        resetForm();
+      }
       // Refresh stats
       try {
         const stats = await fetchStats();
@@ -158,6 +164,25 @@ export default function DailyEntry() {
     } catch {
       // best effort
     }
+  };
+
+  // Load an existing entry into the form for editing. Triggered by the
+  // edit button on an entry card below the prompt grid. (Tapping a
+  // prompt in the grid above no longer auto-loads an existing entry —
+  // that always starts a NEW one. This is the only path into edit mode.)
+  const handleEditEntry = (entry: GlimmerEntry) => {
+    setEditingEntry(entry);
+    setPreState(entry.preState);
+    setPostState(entry.postState);
+    setIntensity(entry.intensity);
+    setBodyLocation(entry.bodyLocation);
+    try { setTags(JSON.parse(entry.tags || '[]')); } catch { setTags([]); }
+    setSleepQuality(entry.sleepQuality);
+    setStressLevel(entry.stressLevel);
+    setDuration(entry.duration);
+    setResponse(entry.response);
+    setNote(entry.note || '');
+    setSelectedPrompt(entry.promptIndex);
   };
 
   const handleDelete = async (id: string) => {
@@ -212,7 +237,10 @@ export default function DailyEntry() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {SHORT_LABELS.map((label, idx) => {
-              const hasEntry = dateEntries.some((e) => e.promptIndex === idx);
+              // Count entries for this prompt on this date — the user can
+              // have multiple per day now (e.g. feel "beautiful" twice).
+              const entriesForPrompt = dateEntries.filter((e) => e.promptIndex === idx);
+              const count = entriesForPrompt.length;
               return (
                 <button
                   key={idx}
@@ -220,14 +248,16 @@ export default function DailyEntry() {
                   className="text-left rounded-xl p-4 transition-all duration-150"
                   style={{
                     backgroundColor: t.cardBg,
-                    border: hasEntry ? `2px solid ${t.btnBg}` : `1px solid ${t.lightLine}`,
+                    border: count > 0 ? `2px solid ${t.btnBg}` : `1px solid ${t.lightLine}`,
                     color: t.text,
                     minHeight: 80,
                   }}
                 >
                   <p className="text-sm font-medium">{label}</p>
                   <p className="text-xs mt-1" style={{ color: t.muted }}>
-                    {hasEntry ? '✓ Entry saved' : PROMPTS[idx]}
+                    {count > 0
+                      ? `${count} ${count === 1 ? 'entry' : 'entries'} saved · tap to add another`
+                      : PROMPTS[idx]}
                   </p>
                 </button>
               );
@@ -255,6 +285,11 @@ export default function DailyEntry() {
                       <span className="text-xs" style={{ color: t.muted }}>Intensity: {entry.intensity}</span>
                     </div>
                     <p className="text-sm mt-1 truncate" style={{ color: t.text }}>{entry.response}</p>
+                    {entry.note && (
+                      <p className="text-xs mt-1 italic truncate" style={{ color: t.muted }}>
+                        · {entry.note}
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <button
@@ -268,7 +303,7 @@ export default function DailyEntry() {
                       </svg>
                     </button>
                     <button
-                      onClick={() => handleSelectPrompt(entry.promptIndex)}
+                      onClick={() => handleEditEntry(entry)}
                       className="flex items-center justify-center rounded-lg text-xs"
                       style={{ color: t.muted, minHeight: 44, minWidth: 44 }}
                       aria-label="Edit entry"
@@ -329,6 +364,33 @@ export default function DailyEntry() {
                 border: `1px solid ${t.lightLine}`,
                 color: t.text,
                 minHeight: 120,
+                transition: 'border-color 0.2s',
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = t.border)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = t.lightLine)}
+            />
+          </div>
+
+          {/* What was happening? — optional one-line context attached to
+              this glimmer. Auto-saves with the rest of the entry. Shows up
+              in the Glimmer Bank and Stats so the user (and therapist) can
+              see the context alongside the response. */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold" style={{ color: t.text }}>
+              What was happening? <span style={{ color: t.muted, fontWeight: 400 }}>(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g., at work, with a friend, after a call…"
+              maxLength={140}
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+              style={{
+                backgroundColor: t.hover,
+                border: `1px solid ${t.lightLine}`,
+                color: t.text,
+                minHeight: 44,
                 transition: 'border-color 0.2s',
               }}
               onFocus={(e) => (e.currentTarget.style.borderColor = t.border)}
@@ -492,11 +554,11 @@ export default function DailyEntry() {
           </section>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
-              onClick={handleSave}
+              onClick={() => handleSave()}
               disabled={saving || !response.trim()}
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
+              className="flex-1 min-w-[140px] py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
               style={{
                 backgroundColor: saving || !response.trim() ? t.lightLine : t.btnBg,
                 color: t.btnFg,
@@ -506,6 +568,28 @@ export default function DailyEntry() {
             >
               {saving ? 'Saving...' : editingEntry ? 'Update entry' : 'Save glimmer'}
             </button>
+
+            {/* "Save & add another" — only when creating a NEW entry (not
+                when editing an existing one). Lets the user chain multiple
+                entries for the same prompt (e.g. feel "beautiful" twice in
+                a day) without going back to the prompt grid each time. */}
+            {!editingEntry && (
+              <button
+                onClick={() => handleSave({ addAnother: true })}
+                disabled={saving || !response.trim()}
+                className="py-2.5 px-4 rounded-xl text-sm font-medium transition-all duration-200"
+                style={{
+                  backgroundColor: 'transparent',
+                  color: t.text,
+                  border: `1px solid ${t.lightLine}`,
+                  minHeight: 44,
+                  opacity: saving || !response.trim() ? 0.5 : 1,
+                }}
+              >
+                Save & add another
+              </button>
+            )}
+
             {editingEntry && (
               <button
                 onClick={() => handleToggleStar(editingEntry)}

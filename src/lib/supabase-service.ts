@@ -57,23 +57,8 @@ export async function fetchEntries(): Promise<{ entries: GlimmerEntry[]; total: 
 
   if (error) throw error;
 
-  const entries: GlimmerEntry[] = (data || []).map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    date: row.date as string,
-    promptIndex: row.prompt_index as number,
-    promptLabel: row.prompt_label as string,
-    response: row.response as string,
-    preState: row.pre_state as string,
-    postState: row.post_state as string,
-    intensity: row.intensity as number,
-    duration: row.duration as string,
-    bodyLocation: row.body_location as string,
-    tags: row.tags as string,
-    sleepQuality: row.sleep_quality as number,
-    stressLevel: row.stress_level as number,
-    starred: row.starred as boolean,
-    createdAt: row.created_at as string,
-  }));
+  // mapEntry handles extracting the note from the tags column for us.
+  const entries: GlimmerEntry[] = (data || []).map((row: Record<string, unknown>) => mapEntry(row));
 
   return { entries, total: entries.length };
 }
@@ -82,7 +67,7 @@ export async function createEntry(payload: {
   date: string; promptIndex: number; promptLabel: string;
   response: string; preState: string; postState: string;
   intensity: number; duration: string; bodyLocation: string;
-  tags: string[]; sleepQuality: number; stressLevel: number; starred: boolean;
+  tags: string[]; note?: string; sleepQuality: number; stressLevel: number; starred: boolean;
 }): Promise<GlimmerEntry> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -100,7 +85,7 @@ export async function createEntry(payload: {
       intensity: payload.intensity,
       duration: payload.duration,
       body_location: payload.bodyLocation,
-      tags: JSON.stringify(payload.tags),
+      tags: serializeTagsRow(payload.tags, payload.note || ''),
       sleep_quality: payload.sleepQuality,
       stress_level: payload.stressLevel,
       starred: payload.starred,
@@ -120,10 +105,26 @@ export async function updateEntry(id: string, updates: Record<string, unknown>) 
   if (updates.intensity !== undefined) dbUpdates.intensity = updates.intensity;
   if (updates.duration !== undefined) dbUpdates.duration = updates.duration;
   if (updates.bodyLocation !== undefined) dbUpdates.body_location = updates.bodyLocation;
-  if (updates.tags !== undefined) dbUpdates.tags = typeof updates.tags === 'string' ? updates.tags : JSON.stringify(updates.tags);
   if (updates.sleepQuality !== undefined) dbUpdates.sleep_quality = updates.sleepQuality;
   if (updates.stressLevel !== undefined) dbUpdates.stress_level = updates.stressLevel;
   if (updates.starred !== undefined) dbUpdates.starred = updates.starred;
+
+  // Tags and note both end up in the same `tags` column (note is smuggled
+  // inside as a `_note` key). If either is being updated, we need to merge
+  // them together — the caller may pass `tags`, `note`, or both.
+  if (updates.tags !== undefined || updates.note !== undefined) {
+    // Parse the incoming tags — could be an array or a JSON-stringified array.
+    let tagsArr: string[] = [];
+    if (updates.tags !== undefined) {
+      if (typeof updates.tags === 'string') {
+        try { tagsArr = JSON.parse(updates.tags) as string[]; } catch { tagsArr = []; }
+      } else if (Array.isArray(updates.tags)) {
+        tagsArr = updates.tags as string[];
+      }
+    }
+    const noteStr = typeof updates.note === 'string' ? updates.note : '';
+    dbUpdates.tags = serializeTagsRow(tagsArr, noteStr);
+  }
 
   const { error } = await supabase
     .from('glimmer_entries')
@@ -242,10 +243,11 @@ export async function fetchStats(): Promise<Stats> {
 
   const tagCounts: Record<string, number> = {};
   entries.forEach((e: Record<string, unknown>) => {
-    try {
-      const tags: string[] = JSON.parse(e.tags as string);
-      tags.forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; });
-    } catch { /* ignore */ }
+    // parseTagsRow handles both the old array format and the new object
+    // format (which also carries the _note). We only count actual tags,
+    // never the _note field.
+    const { tags } = parseTagsRow(e.tags as string);
+    tags.forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; });
   });
 
   const today = new Date();
@@ -320,19 +322,60 @@ export async function fetchStats(): Promise<Stats> {
 
 // ---- Helpers ----
 
+// The note field is smuggled inside the existing `tags` JSON column as a
+// special `_note` key so we don't need a Supabase schema migration. The
+// user sees a separate "What was happening?" input in the UI; on save we
+// pack it into the tags object; on load we extract it back out. The tag
+// chips UI never sees the _note because we filter it out before display.
+//
+// Shape stored in the `tags` column:
+//   { tags: ["Morning", "Alone"], _note: "at work, stressful morning" }
+// (Old rows that store an array of strings still work — see parseTagsRow.)
+
+const NOTE_KEY = '_note';
+
+function parseTagsRow(raw: string | null | undefined): { tags: string[]; note: string } {
+  if (!raw) return { tags: [], note: '' };
+  try {
+    const parsed = JSON.parse(raw);
+    // Old format: array of strings, e.g. ["Morning", "Alone"]
+    if (Array.isArray(parsed)) return { tags: parsed, note: '' };
+    // New format: object with `tags` array and optional `_note` string
+    if (parsed && typeof parsed === 'object') {
+      const tags = Array.isArray(parsed.tags) ? parsed.tags : [];
+      const note = typeof parsed[NOTE_KEY] === 'string' ? parsed[NOTE_KEY] : '';
+      return { tags, note };
+    }
+    return { tags: [], note: '' };
+  } catch {
+    return { tags: [], note: '' };
+  }
+}
+
+function serializeTagsRow(tags: string[], note: string): string {
+  if (!note) {
+    // No note — store as a plain array for backward compatibility with
+    // any code that expects the old format.
+    return JSON.stringify(tags);
+  }
+  return JSON.stringify({ tags, [NOTE_KEY]: note });
+}
+
 function mapEntry(row: Record<string, unknown>): GlimmerEntry {
+  const { tags, note } = parseTagsRow(row.tags as string);
   return {
     id: row.id as string,
     date: row.date as string,
     promptIndex: row.prompt_index as number,
     promptLabel: row.prompt_label as string,
     response: row.response as string,
+    note,
     preState: row.pre_state as string,
     postState: row.post_state as string,
     intensity: row.intensity as number,
     duration: row.duration as string,
     bodyLocation: row.body_location as string,
-    tags: row.tags as string,
+    tags: JSON.stringify(tags), // keep `tags` as a JSON-stringified array on the client side
     sleepQuality: row.sleep_quality as number,
     stressLevel: row.stress_level as number,
     starred: row.starred as boolean,

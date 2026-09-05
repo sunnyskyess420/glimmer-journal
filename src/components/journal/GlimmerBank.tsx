@@ -86,6 +86,11 @@ export default function GlimmerBank() {
               <p className="text-sm line-clamp-3" style={{ color: t.text }}>
                 {entry.response}
               </p>
+              {entry.note && (
+                <p className="text-xs italic line-clamp-2" style={{ color: t.muted }}>
+                  · {entry.note}
+                </p>
+              )}
               <div className="flex items-center gap-3 flex-wrap">
                 {/* Intensity dots */}
                 <div className="flex items-center gap-1">

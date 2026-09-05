@@ -17,6 +17,11 @@ export interface GlimmerEntry {
   promptIndex: number;
   promptLabel: string;
   response: string;
+  /** Optional one-line context the user can attach to a glimmer
+      (e.g. "at work", "with a friend"). Survives in the `tags` column
+      as a special `_note:...` entry so no Supabase schema change is
+      needed — extracted back out on load. */
+  note: string;
   preState: string;
   postState: string;
   intensity: number;
