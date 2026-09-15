@@ -56,6 +56,46 @@ export default function Home() {
   // child component consumes as `t: ThemeColors`. Stays in sync with the
   // store's `theme` and `themeMode` automatically.
   const t: ThemeColors = THEMES[theme][themeMode];
+
+  // Mirror the active theme into the shadcn CSS variables.
+  //
+  // The journal components read hexes straight out of `t`, but the shared
+  // ui/ primitives (dialog, toast, input, button) read the CSS variables
+  // declared in globals.css. Those were fixed neutral greys, so a Sage or
+  // Dusk dialog, toast or input looked like it came from a different app.
+  // This keeps the two halves of the UI on the same palette.
+  useEffect(() => {
+    const r = document.documentElement;
+    const vars: Record<string, string> = {
+      "--background": t.bg,
+      "--foreground": t.text,
+      "--card": t.cardBg,
+      "--card-foreground": t.text,
+      "--popover": t.cardBg,
+      "--popover-foreground": t.text,
+      "--primary": t.btnBg,
+      "--primary-foreground": t.btnFg,
+      "--secondary": t.panelBg,
+      "--secondary-foreground": t.text,
+      "--muted": t.panelBg,
+      "--muted-foreground": t.muted,
+      "--accent": t.select,
+      "--accent-foreground": t.text,
+      "--border": t.lightLine,
+      "--input": t.lightLine,
+      "--ring": t.border,
+      "--sidebar": t.panelBg,
+      "--sidebar-foreground": t.text,
+      "--sidebar-border": t.lightLine,
+      "--sidebar-accent": t.select,
+      "--sidebar-accent-foreground": t.text,
+      "--sidebar-ring": t.border,
+    };
+    for (const key of Object.keys(vars)) {
+      r.style.setProperty(key, vars[key]);
+    }
+  }, [theme, themeMode]);
+
   const [initializing, setInitializing] = useState(true);
   const [footerIdx, setFooterIdx] = useState(0);
 
