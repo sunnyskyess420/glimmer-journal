@@ -98,7 +98,7 @@ export const useJournalStore = create<JournalStore>((set) => ({
     })),
   stats: null,
   setStats: (stats) => set({ stats }),
-  theme: 'Mono',
+  theme: 'Sage',
   setTheme: (theme) => set({ theme }),
   // Default to 'light'. Home.tsx overrides this on first load with the
   // user's system preference (prefers-color-scheme: dark) before any UI

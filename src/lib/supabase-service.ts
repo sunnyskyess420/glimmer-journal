@@ -8,7 +8,7 @@ export async function signUp(email: string, password: string, name?: string) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { name: name || null, theme: 'Mono' } },
+    options: { data: { name: name || null, theme: 'Sage' } },
   });
   if (error) throw error;
   return data;
@@ -27,7 +27,7 @@ export async function signOut() {
 
 export async function getUserTheme(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
-  return (user?.user_metadata?.theme as string) || 'Mono';
+  return (user?.user_metadata?.theme as string) || 'Sage';
 }
 
 /**

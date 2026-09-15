@@ -40,7 +40,7 @@ export default function AuthScreen({ onAuth, theme, themeMode }: AuthScreenProps
           id: user.id,
           email: user.email!,
           name: user.user_metadata?.name || null,
-          theme: user.user_metadata?.theme || 'Mono',
+          theme: user.user_metadata?.theme || 'Sage',
         });
       }
     } catch (err: unknown) {

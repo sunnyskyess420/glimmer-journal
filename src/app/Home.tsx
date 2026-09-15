@@ -210,7 +210,7 @@ export default function Home() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const u = session.user;
-        const savedTheme = (u.user_metadata?.theme as string) || 'Mono';
+        const savedTheme = (u.user_metadata?.theme as string) || 'Sage';
         const savedMode = (u.user_metadata?.themeMode as string) || null;
         setUser({
           id: u.id,
@@ -239,7 +239,7 @@ export default function Home() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         const u = session.user;
-        const savedTheme = (u.user_metadata?.theme as string) || 'Mono';
+        const savedTheme = (u.user_metadata?.theme as string) || 'Sage';
         const savedMode = (u.user_metadata?.themeMode as string) || null;
         setUser({
           id: u.id,

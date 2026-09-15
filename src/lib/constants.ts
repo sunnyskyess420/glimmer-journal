@@ -286,4 +286,4 @@ export type ThemeName = keyof typeof THEMES;
 // (ThemeColors is already exported as an interface above — no re-export
 // needed here.)
 
-export const THEME_ORDER: ThemeName[] = ["Mono", "Sage", "Ocean", "Dusk", "Rose"];
+export const THEME_ORDER: ThemeName[] = ["Sage", "Mono", "Ocean", "Dusk", "Rose"];
