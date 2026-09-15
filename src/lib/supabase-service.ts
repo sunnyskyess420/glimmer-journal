@@ -20,6 +20,28 @@ export async function signIn(email: string, password: string) {
   return data;
 }
 
+/**
+ * Guest (anonymous) sign-in.
+ *
+ * Creates a real Supabase user with no email and no password, so every
+ * downstream feature — entries, stats, themes, weekly reflections, export —
+ * behaves exactly as it does for a registered account. There is no separate
+ * "guest" code path to keep in sync.
+ *
+ * Two things to know:
+ *  1. It requires "Anonymous sign-ins" to be enabled for the project:
+ *     Supabase dashboard > Authentication > Sign In / Providers > Anonymous.
+ *     The call fails with a clear error if that switch is off.
+ *  2. A guest has no email, so the account can only be reached from the
+ *     browser holding its session. Clearing site data loses access to the
+ *     entries. Linking an account later would need a separate step.
+ */
+export async function signInAsGuest() {
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) throw error;
+  return data;
+}
+
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;

@@ -188,7 +188,9 @@ export default function Sidebar({ onLogout }: SidebarProps) {
             <p className="text-sm font-semibold truncate" style={{ color: t.text }}>
               {user?.name || user?.email}
             </p>
-            {user?.name && (
+            {/* Guests have a label but no email, so only show the second
+                line when there is actually an address to show. */}
+            {user?.name && user?.email && (
               <p className="text-xs truncate" style={{ color: t.muted }}>{user.email}</p>
             )}
           </div>

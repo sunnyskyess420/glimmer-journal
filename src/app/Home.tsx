@@ -214,8 +214,10 @@ export default function Home() {
         const savedMode = (u.user_metadata?.themeMode as string) || null;
         setUser({
           id: u.id,
-          email: u.email!,
-          name: u.user_metadata?.name || null,
+          email: u.email ?? '',
+          // Guests are anonymous Supabase users: no email and no stored name,
+          // so give them a label instead of rendering a blank profile.
+          name: u.user_metadata?.name || (u.email ? null : 'Guest'),
           theme: savedTheme,
           themeMode: savedMode || undefined,
         });
@@ -243,8 +245,8 @@ export default function Home() {
         const savedMode = (u.user_metadata?.themeMode as string) || null;
         setUser({
           id: u.id,
-          email: u.email!,
-          name: u.user_metadata?.name || null,
+          email: u.email ?? '',
+          name: u.user_metadata?.name || (u.email ? null : 'Guest'),
           theme: savedTheme,
           themeMode: savedMode || undefined,
         });

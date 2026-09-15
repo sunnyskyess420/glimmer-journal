@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { THEMES, type ThemeName, type ThemeMode, FOOTER_MESSAGES } from '@/lib/constants';
-import { signUp, signIn } from '@/lib/supabase-service';
+import { signUp, signIn, signInAsGuest } from '@/lib/supabase-service';
 import { supabase } from '@/lib/supabase';
 
 interface AuthScreenProps {
@@ -55,6 +55,41 @@ export default function AuthScreen({ onAuth, theme, themeMode }: AuthScreenProps
         }
       } else {
         setError('Something went wrong');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Guest entry. Same destination as logging in — an anonymous Supabase user
+  // — so nothing downstream needs to know the difference. Only the error
+  // handling is special: if the project has not enabled anonymous sign-ins
+  // yet, say so plainly instead of surfacing a raw API message.
+  const handleGuest = async () => {
+    setError('');
+    setLoading(true);
+
+    try {
+      await signInAsGuest();
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (user) {
+        onAuth({
+          id: user.id,
+          email: user.email ?? '',
+          name: user.user_metadata?.name || 'Guest',
+          theme: user.user_metadata?.theme || 'Sage',
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      if (/anonymous/i.test(msg) && /disabl|not enabled|not allowed/i.test(msg)) {
+        setError('Guest access is not switched on for this app yet.');
+      } else if (msg) {
+        setError(msg);
+      } else {
+        setError('Could not start a guest session. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -172,6 +207,33 @@ export default function AuthScreen({ onAuth, theme, themeMode }: AuthScreenProps
             {loading ? 'Please wait...' : mode === 'login' ? 'Log in' : 'Create account'}
           </button>
         </form>
+
+        {/* Guest entry — no email, no password. */}
+        <div className="flex items-center gap-3 mt-5">
+          <span className="flex-1 h-px" style={{ backgroundColor: t.lightLine }} />
+          <span className="text-xs" style={{ color: t.muted }}>or</span>
+          <span className="flex-1 h-px" style={{ backgroundColor: t.lightLine }} />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGuest}
+          disabled={loading}
+          className="w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 mt-3"
+          style={{
+            backgroundColor: 'transparent',
+            border: `1px solid ${t.lightLine}`,
+            color: t.text,
+            minHeight: 44,
+            opacity: loading ? 0.7 : 1,
+          }}
+        >
+          Continue as guest
+        </button>
+
+        <p className="text-center text-xs mt-3" style={{ color: t.muted }}>
+          No email needed — your entries stay linked to this browser.
+        </p>
 
         <p className="text-center text-xs mt-5" style={{ color: t.muted }}>
           {mode === 'login'
