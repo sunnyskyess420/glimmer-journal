@@ -276,6 +276,29 @@ export const THEMES: Record<string, ThemeFamily> = {
       toastBg: "#D06888", toastFg: "#FFFFFF",
     },
   },
+
+  // ----- Clay -----
+  // The ClearStep hub palette: warm paper in light, deep brown in dark, with
+  // a brown accent and terracotta highlights. Every value is derived from the
+  // hub's own oklch tokens, so this is the theme that matches the rest of the
+  // family across sites. Contrast ratios were computed for the text, button,
+  // toast, tag, border and star pairs in both modes before committing.
+  Clay: {
+    light: {
+      bg: "#FAF6EE", panelBg: "#F6F0E5", cardBg: "#FFFDF9", text: "#2B2019",
+      muted: "#60544C", border: "#895433", lightLine: "#DED8CF", hover: "#F2ECDF",
+      select: "#F0E1D0", btnBg: "#895433", btnFg: "#FDFAF3", btnHover: "#704125",
+      footer: "#867D75", star: "#BB9869", starActive: "#CA7E31", tagBg: "#F3EADD",
+      tagFg: "#2B2019", toastBg: "#895433", toastFg: "#FDFAF3",
+    },
+    dark: {
+      bg: "#18130D", panelBg: "#211B14", cardBg: "#241E17", text: "#EFEBE2",
+      muted: "#BAB5AC", border: "#D49B70", lightLine: "#3C362E", hover: "#29231C",
+      select: "#382B21", btnBg: "#D49B70", btnFg: "#18130D", btnHover: "#E5B288",
+      footer: "#8F8A81", star: "#887054", starActive: "#E39A51", tagBg: "#352C23",
+      tagFg: "#EFEBE2", toastBg: "#D49B70", toastFg: "#18130D",
+    },
+  },
 };
 
 export type ThemeName = keyof typeof THEMES;
@@ -286,4 +309,4 @@ export type ThemeName = keyof typeof THEMES;
 // (ThemeColors is already exported as an interface above — no re-export
 // needed here.)
 
-export const THEME_ORDER: ThemeName[] = ["Sage", "Mono", "Ocean", "Dusk", "Rose"];
+export const THEME_ORDER: ThemeName[] = ["Clay", "Sage", "Mono", "Ocean", "Dusk", "Rose"];
