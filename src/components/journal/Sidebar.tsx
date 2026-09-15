@@ -45,6 +45,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
     entries,
     selectedDate,
     setSelectedDate,
+    setActiveTab,
     sidebarOpen,
     setSidebarOpen,
   } = useJournalStore();
@@ -411,7 +412,13 @@ export default function Sidebar({ onLogout }: SidebarProps) {
                 <button
                   key={date}
                   onClick={() => {
+                    // Picking a date only means something on the Daily Entry tab —
+                    // it is the only view that reads `selectedDate`. This used to
+                    // set the date and close the drawer without switching tab, so
+                    // tapping a day appeared to do nothing: the app opens on
+                    // Check-in and stayed there.
                     setSelectedDate(date);
+                    setActiveTab('daily');
                     setSidebarOpen(false);
                   }}
                   className="text-left px-3 py-2 rounded-lg text-sm transition-all duration-150"
