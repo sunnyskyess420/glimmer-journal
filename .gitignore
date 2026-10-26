@@ -1,0 +1,60 @@
+# dependencies — any path (not just root)
+node_modules/
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js — any path (the build cache may end up in subdirectories
+# during local dev; ignore it everywhere)
+.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# logs
+dev.log
+server.log
+
+# uploaded screenshots / files shared in chat — not part of the app
+upload/
+
+# workspace scratch directory (used during local development only)
+workspace/
+
+# worklog — internal to the dev environment
+worklog.md
+
+# tool-results — internal scratch output
+tool-results/
+
+# skills — provided by the dev environment, not part of the app
+skills/
+
+# backup directories (used during local development only)
+_backup/
+
+# generated scripts (used by the dev environment during build steps)
+scripts/

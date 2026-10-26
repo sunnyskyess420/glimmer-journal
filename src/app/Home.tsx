@@ -1,0 +1,406 @@
+'use client';
+
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  THEMES,
+  FOOTER_MESSAGES,
+  FIRST_TIME_MESSAGES,
+  RETURN_MESSAGES,
+  type ThemeName,
+  type ThemeMode,
+  type ThemeColors,
+} from '@/lib/constants';
+import { useJournalStore } from '@/store/journal-store';
+import { fetchEntries, fetchStats, getUserTheme, updateUserTheme } from '@/lib/local-storage-service';
+import Sidebar from '@/components/journal/Sidebar';
+import DailyEntry from '@/components/journal/DailyEntry';
+import { CheckIn, Toolbox } from '@/components/journal/Regulate';
+import GlimmerBank from '@/components/journal/GlimmerBank';
+import WeeklyReflection from '@/components/journal/WeeklyReflection';
+import StatsView from '@/components/journal/StatsView';
+import { useReminder } from '@/hooks/use-reminder';
+import { useReminderBridge } from '@/hooks/use-reminder-bridge';
+
+const TABS = [
+  { id: 'daily', label: 'Daily Entry' },
+  { id: 'checkin', label: 'Check-in' },
+  { id: 'toolbox', label: 'Toolbox' },
+  { id: 'bank', label: 'Glimmer Bank' },
+  { id: 'weekly', label: 'Weekly' },
+  { id: 'stats', label: 'Stats' },
+] as const;
+
+export default function Home() {
+  const store = useJournalStore();
+  const {
+    user,
+    setUser,
+    theme,
+    setTheme,
+    themeMode,
+    setThemeMode,
+    activeTab,
+    setActiveTab,
+    sidebarOpen,
+    setSidebarOpen,
+    setEntries,
+    setStats,
+    toastMessage,
+    milestoneMessage,
+    showMilestone,
+  } = store;
+
+  // Resolve the active color set: theme family + mode. This is what every
+  // child component consumes as `t: ThemeColors`. Stays in sync with the
+  // store's `theme` and `themeMode` automatically.
+  const t: ThemeColors = THEMES[theme][themeMode];
+
+  // Mirror the active theme into the shadcn CSS variables.
+  //
+  // The journal components read hexes straight out of `t`, but the shared
+  // ui/ primitives (dialog, toast, input, button) read the CSS variables
+  // declared in globals.css. Those were fixed neutral greys, so a Sage or
+  // Dusk dialog, toast or input looked like it came from a different app.
+  // This keeps the two halves of the UI on the same palette.
+  useEffect(() => {
+    const r = document.documentElement;
+    const vars: Record<string, string> = {
+      "--background": t.bg,
+      "--foreground": t.text,
+      "--card": t.cardBg,
+      "--card-foreground": t.text,
+      "--popover": t.cardBg,
+      "--popover-foreground": t.text,
+      "--primary": t.btnBg,
+      "--primary-foreground": t.btnFg,
+      "--secondary": t.panelBg,
+      "--secondary-foreground": t.text,
+      "--muted": t.panelBg,
+      "--muted-foreground": t.muted,
+      "--accent": t.select,
+      "--accent-foreground": t.text,
+      "--border": t.lightLine,
+      "--input": t.lightLine,
+      "--ring": t.border,
+      "--sidebar": t.panelBg,
+      "--sidebar-foreground": t.text,
+      "--sidebar-border": t.lightLine,
+      "--sidebar-accent": t.select,
+      "--sidebar-accent-foreground": t.text,
+      "--sidebar-ring": t.border,
+    };
+    for (const key of Object.keys(vars)) {
+      r.style.setProperty(key, vars[key]);
+    }
+  }, [theme, themeMode]);
+
+  const [initializing, setInitializing] = useState(true);
+  const [footerIdx, setFooterIdx] = useState(0);
+
+  // Mount the daily-reminder polling. The hook reads the latest reminder
+  // settings on each tick so toggling it in the Sidebar updates behavior immediately.
+  useReminder();
+  // Bridge that lets the service worker read/write localStorage for the
+  // reminder settings + practice log. Required for the SW-side periodic
+  // background sync (Chrome/Edge only) to know whether today's small
+  // thing has been done.
+  useReminderBridge();
+
+  // Rotating footer messages
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFooterIdx((i) => (i + 1) % FOOTER_MESSAGES.length);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, []); // Footer rotation - forces new build
+
+  // Detect system color preference on first load. If the user has OS-level
+  // dark mode enabled (`prefers-color-scheme: dark`) AND they haven't
+  // explicitly chosen a mode yet (i.e., no saved preference in Supabase),
+  // default the app to dark mode. This runs once before the auth check
+  // resolves so first-time users see the right mode immediately.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    // Only apply the system preference if the user hasn't explicitly
+    // chosen a mode (signaled by the store still holding the default
+    // 'light'). The Supabase session check below will overwrite this
+    // if a saved preference exists, so we don't fight the user's choice.
+    if (mq.matches && useJournalStore.getState().themeMode === 'light') {
+      // Set the mode only if no saved preference will come back from
+      // Supabase. We use a sessionStorage flag so the system-default
+      // application only happens on the very first load of a session.
+      const alreadyApplied = sessionStorage.getItem('glimmer.systemThemeApplied');
+      if (!alreadyApplied) {
+        sessionStorage.setItem('glimmer.systemThemeApplied', '1');
+        setThemeMode('dark');
+      }
+    }
+    // Listen for live changes to the OS preference. If the user switches
+    // their OS between light/dark while the app is open, follow along —
+    // but only if they haven't explicitly chosen a mode in-app (we track
+    // that via a localStorage flag set by the Sidebar's toggle).
+    const handler = (e: MediaQueryListEvent) => {
+      const userChoseExplicitly = localStorage.getItem('glimmer.themeMode.chosen');
+      if (userChoseExplicitly) return;
+      setThemeMode(e.matches ? 'dark' : 'light');
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [setThemeMode]);
+
+  // Register service worker for PWA install support.
+  // Chrome/Brave require a registered SW with a fetch handler before they'll
+  // fire the `beforeinstallprompt` event (which the Sidebar's Install button
+  // listens for). Without this, the Install button never shows on Android.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+    // Only register in production — in dev, the SW interferes with HMR.
+    if (process.env.NODE_ENV !== 'production') return;
+
+    const register = () => {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .catch((err) => {
+          // Silent fail — PWA install just won't work, app still works fine
+          console.warn('SW registration failed:', err);
+        });
+    };
+
+    // Register on next tick so it doesn't block initial page paint
+    window.addEventListener('load', register);
+    return () => window.removeEventListener('load', register);
+  }, []);
+
+  // Welcome message based on entry count
+  const welcomeMessage = useMemo(() => {
+    const total = store.totalEntries;
+    if (total === 0) {
+      return FIRST_TIME_MESSAGES[Math.floor(Math.random() * FIRST_TIME_MESSAGES.length)];
+    }
+    return RETURN_MESSAGES[Math.floor(Math.random() * RETURN_MESSAGES.length)];
+  }, [store.totalEntries]);
+
+  const loadEntries = useCallback(async () => {
+    try {
+      const { entries, total } = await fetchEntries();
+      useJournalStore.getState().setEntries(entries, total);
+    } catch {
+      // best effort
+    }
+  }, []);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const stats = await fetchStats();
+      useJournalStore.getState().setStats(stats);
+    } catch {
+      // best effort
+    }
+  }, []);
+
+  // Initialize app on mount - load theme and entries from localStorage
+  useEffect(() => {
+    const initApp = async () => {
+      // Load saved theme
+      const savedTheme = await getUserTheme();
+      const savedMode = localStorage.getItem('glimmer_theme_mode') as 'light' | 'dark' | null;
+
+      if (THEMES[savedTheme as ThemeName]) setTheme(savedTheme as ThemeName);
+      if (savedMode === 'light' || savedMode === 'dark') {
+        setThemeMode(savedMode);
+        localStorage.setItem('glimmer.themeMode.chosen', '1');
+      }
+
+      // Set a default user for localStorage mode
+      setUser({
+        id: 'local-user',
+        email: '',
+        name: 'Local User',
+        theme: savedTheme,
+        themeMode: savedMode || undefined,
+      });
+
+      // Load entries and stats
+      await Promise.all([loadEntries(), loadStats()]);
+      setInitializing(false);
+    };
+
+    initApp();
+  }, [loadEntries, loadStats, setTheme, setThemeMode, setUser]);
+
+  const handleLogout = useCallback(() => {
+    // For localStorage, logout doesn't do anything - data stays in browser
+    // We could clear localStorage if desired, but keeping it preserves data
+  }, []);
+
+  // Initializing screen
+  if (initializing) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ backgroundColor: t.bg, transition: 'background-color 0.3s' }}
+      >
+        <div
+          className="w-8 h-8 rounded-full animate-spin"
+          style={{ border: `2px solid ${t.lightLine}`, borderTopColor: t.btnBg }}
+        />
+      </div>
+    );
+  }
+
+  // Main app
+  return (
+    <div
+      className="min-h-screen flex flex-col"
+      style={{
+        backgroundColor: t.bg,
+        color: t.text,
+        transition: 'background-color 0.3s, color 0.3s',
+      }}
+    >
+      {/* Toast notification */}
+      <div
+        className="fixed top-0 left-0 right-0 z-[60] flex justify-center transition-all duration-300"
+        style={{
+          transform: toastMessage ? 'translateY(0)' : 'translateY(-100%)',
+          opacity: toastMessage ? 1 : 0,
+          pointerEvents: toastMessage ? 'auto' : 'none',
+        }}
+      >
+        <div
+          className="mt-4 px-5 py-3 rounded-xl text-sm font-medium shadow-lg"
+          style={{
+            backgroundColor: t.toastBg,
+            color: t.toastFg,
+            maxWidth: 400,
+          }}
+        >
+          {toastMessage}
+        </div>
+      </div>
+
+      {milestoneMessage && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center px-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => useJournalStore.getState().showMilestone('')}
+        >
+          <div
+            className="rounded-2xl p-8 text-center max-w-sm w-full"
+            style={{
+              backgroundColor: t.cardBg,
+              border: `1px solid ${t.lightLine}`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-5xl mb-4">🎉</div>
+            <h3 className="text-lg font-bold mb-2" style={{ color: t.text }}>Milestone!</h3>
+            <p className="text-sm" style={{ color: t.muted }}>{milestoneMessage}</p>
+            <button
+              onClick={() => useJournalStore.getState().showMilestone('')}
+              className="mt-5 px-6 py-2.5 rounded-xl text-sm font-medium"
+              style={{
+                backgroundColor: t.btnBg,
+                color: t.btnFg,
+                minHeight: 44,
+              }}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-1">
+        <Sidebar />
+
+        <main className="flex-1 flex flex-col min-w-0">
+          {/* Top bar (mobile) */}
+          <header
+            className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 lg:px-6"
+            style={{
+              backgroundColor: t.bg,
+              borderBottom: `1px solid ${t.lightLine}`,
+              transition: 'background-color 0.3s, border-color 0.3s',
+            }}
+          >
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden flex items-center justify-center rounded-lg"
+              style={{ color: t.text, minHeight: 44, minWidth: 44 }}
+              aria-label="Open menu"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="4" x2="20" y1="12" y2="12" /><line x1="4" x2="20" y1="6" y2="6" /><line x1="4" x2="20" y1="18" y2="18" />
+              </svg>
+            </button>
+            <h1 className="text-base font-semibold" style={{ color: t.text }}>
+              Glimmer Journal
+            </h1>
+          </header>
+
+          {/* Welcome message */}
+          <div className="px-4 pt-4 lg:px-6">
+            <p className="text-sm" style={{ color: t.muted }}>{welcomeMessage}</p>
+          </div>
+
+          {/* Tabs */}
+          <nav className="px-4 pt-3 lg:px-6">
+            <div
+              className="flex gap-1 p-1 rounded-lg overflow-x-auto"
+              style={{ backgroundColor: t.hover }}
+            >
+              {TABS.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className="flex-1 py-2 px-3 text-sm font-medium rounded-md transition-all duration-200 whitespace-nowrap"
+                    style={{
+                      backgroundColor: isActive ? t.cardBg : 'transparent',
+                      color: isActive ? t.text : t.muted,
+                      minHeight: 44,
+                      boxShadow: isActive ? `0 1px 3px rgba(0,0,0,0.08)` : 'none',
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+
+          {/* Tab content */}
+          <div className="flex-1 px-4 py-4 lg:px-6">
+            {activeTab === 'daily' && <DailyEntry />}
+            {activeTab === 'checkin' && <CheckIn />}
+            {activeTab === 'toolbox' && <Toolbox />}
+            {activeTab === 'bank' && <GlimmerBank />}
+            {activeTab === 'weekly' && <WeeklyReflection />}
+            {activeTab === 'stats' && <StatsView />}
+          </div>
+
+          {/* Footer */}
+          <footer
+            className="mt-auto px-4 py-4 lg:px-6"
+            style={{
+              borderTop: `1px solid ${t.lightLine}`,
+              transition: 'border-color 0.3s',
+            }}
+          >
+            <p
+              className="text-xs text-center leading-relaxed"
+              style={{ color: t.footer, transition: 'color 0.3s' }}
+            >
+              {FOOTER_MESSAGES[footerIdx]}
+            </p>
+          </footer>
+        </main>
+      </div>
+    </div>
+  );
+}
